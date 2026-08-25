@@ -51,8 +51,10 @@ export type BlockIndex = {
   builtAt: string;
   year: number;
   radiusMiles: number;
-  /** Weighted-incident totals at the 10th..90th percentile of sampled city blocks. */
+  /** Weighted-incident totals at the 10th..90th percentile of sampled city points. */
   baselineDeciles: number[];
+  /** The heaviest neighbourhood the baseline sample saw. Anchors the top decile. */
+  tailMax?: number;
   blocks: Block[];
 };
 
@@ -96,8 +98,14 @@ const COVERAGE_MILES = 2;
  * Deciles give nine steps, which makes neighbouring blocks land on the same
  * round number. Interpolating between them keeps the ranking honest without
  * pretending to more precision than the sample supports.
+ *
+ * Above the top decile we interpolate again, out to `tailMax` -- the heaviest
+ * neighbourhood the baseline sampled. Returning a flat 100 there collapsed the
+ * worst tenth of the city onto one score: Downtown (1877 weighted) and East San
+ * Jose (1525) both read 0, which is exactly where a renter needs the gap most.
+ * Without a tailMax there is nothing to stretch against, so it still clamps.
  */
-export function percentileOf(weight: number, deciles: number[]): number {
+export function percentileOf(weight: number, deciles: number[], tailMax?: number): number {
   const step = 100 / (deciles.length + 1);
   for (let i = 0; i < deciles.length; i++) {
     const cut = deciles[i]!;
@@ -108,7 +116,10 @@ export function percentileOf(weight: number, deciles: number[]): number {
       return step * (i + within);
     }
   }
-  return 100;
+  const top = deciles[deciles.length - 1] ?? 0;
+  if (!tailMax || tailMax <= top) return 100;
+  const within = Math.min(1, (weight - top) / (tailMax - top));
+  return step * deciles.length + within * step;
 }
 
 export async function scoreSafety(at: LatLng): Promise<Pillar> {
@@ -144,7 +155,7 @@ export async function scoreSafety(at: LatLng): Promise<Pillar> {
 
   // Percentile-rank this block against the sampled city distribution, then
   // invert: fewer weighted incidents than most of the city == a higher score.
-  const score = Math.round(100 - percentileOf(weight, index.baselineDeciles));
+  const score = Math.round(100 - percentileOf(weight, index.baselineDeciles, index.tailMax));
 
   const band = score >= 67 ? "good" : score >= 34 ? "moderate" : "poor";
   const headline =

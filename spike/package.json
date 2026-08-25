@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Scoring-engine spike for Reality Check. No UI, no dependencies.",
   "scripts": {
-    "score": "node --experimental-strip-types --no-warnings src/index.ts",
+    "score": "node --env-file-if-exists=.env --experimental-strip-types --no-warnings src/index.ts",
+    "rebaseline": "node --experimental-strip-types --no-warnings src/buildIndex.ts --rebaseline",
     "build-index": "node --experimental-strip-types --no-warnings src/buildIndex.ts",
     "check": "node --experimental-strip-types --no-warnings src/selftest.ts"
   },

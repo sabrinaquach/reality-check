@@ -39,6 +39,16 @@ check("the worst block ranks 100", percentileOf(5000, deciles) === 100);
 check("percentile interpolates between deciles", percentileOf(150, deciles) !== percentileOf(190, deciles));
 check("percentile is monotonic", percentileOf(250, deciles) < percentileOf(650, deciles));
 
+console.log("\nsafety tail");
+// Without a tailMax there is nothing to stretch against, so the old clamp stands.
+check("clamps to 100 with no tailMax", percentileOf(5000, deciles) === 100);
+// With one, the worst tenth of the city stops being a single flat number.
+check("the tail separates two bad blocks", percentileOf(1525, deciles, 2033) < percentileOf(1877, deciles, 2033));
+check("the tail is continuous at the top decile", percentileOf(900, deciles, 2033) === 90);
+check("nothing beats the worst sampled neighbourhood", percentileOf(9999, deciles, 2033) === 100);
+check("the tail stays inside the top decile band", percentileOf(1200, deciles, 2033) > 90);
+check("a tailMax below the top decile is ignored", percentileOf(5000, deciles, 500) === 100);
+
 console.log("\nweighting");
 const priorities: Priority[] = ["safety", "commute"];
 check("a first priority outweighs an unpicked pillar", weightFor("safety", priorities) > weightFor("cost", priorities));

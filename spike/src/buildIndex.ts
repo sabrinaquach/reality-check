@@ -10,7 +10,7 @@
  *
  *   npm run build-index -- --year 2026 --limit 4000
  */
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { classify, WEIGHTS, type Block, type BlockIndex } from "./sources/safety.ts";
 import { milesBetween } from "./geocode.ts";
 
@@ -95,8 +95,19 @@ async function batchGeocode(addresses: string[]): Promise<Map<string, { lat: num
   return out;
 }
 
-/** Sample real blocks to learn what a "normal" neighbourhood total looks like. */
-function baselineDeciles(blocks: Block[]): number[] {
+/**
+ * Sample real blocks to learn what a "normal" neighbourhood total looks like,
+ * and how heavy the worst one gets.
+ *
+ * Sampling at blocks skews a little harsh -- these are the busiest blocks in
+ * the city, so their surroundings are busier than a random address. Gridding
+ * the bounding box instead was tried and measured worse: San Jose's box is full
+ * of hillside and industrial land nobody rents in, which drags the median to
+ * zero and pushes Almaden Valley -- genuinely one of the quietest parts of the
+ * city -- down to 41. Indexing all ~26k blocks rather than the top 4k is the
+ * real fix; until then blocks are the closest thing to a lived-in sample.
+ */
+function baseline(blocks: Block[]): { deciles: number[]; tailMax: number; sampled: number } {
   const sample = blocks.length > 400
     ? blocks.filter((_, i) => i % Math.floor(blocks.length / 400) === 0).slice(0, 400)
     : blocks;
@@ -105,11 +116,29 @@ function baselineDeciles(blocks: Block[]): number[] {
     for (const b of blocks) if (milesBetween(origin, b) <= RADIUS_MILES) w += b.weight;
     return w;
   }).sort((a, b) => a - b);
-  return Array.from({ length: 9 }, (_, i) =>
-    totals[Math.floor((totals.length * (i + 1)) / 10)] ?? 0);
+  return {
+    deciles: Array.from({ length: 9 }, (_, i) => totals[Math.floor((totals.length * (i + 1)) / 10)] ?? 0),
+    tailMax: totals[totals.length - 1] ?? 0,
+    sampled: totals.length,
+  };
+}
+
+const INDEX_PATH = new URL("../data/blocks.json", import.meta.url);
+
+/** Recompute the baseline from blocks already on disk -- no refetch, no regeocode. */
+async function rebaseline() {
+  const index = JSON.parse(await readFile(INDEX_PATH, "utf8")) as BlockIndex;
+  console.log(`\nRe-baselining ${index.blocks.length} blocks from ${index.year}...`);
+  const { deciles, tailMax, sampled } = baseline(index.blocks);
+  const next: BlockIndex = { ...index, builtAt: new Date().toISOString(), baselineDeciles: deciles, tailMax };
+  await writeFile(INDEX_PATH, JSON.stringify(next));
+  console.log(`   ${sampled} blocks sampled`);
+  console.log(`   deciles: ${deciles.join(", ")}`);
+  console.log(`   tailMax: ${tailMax}\n`);
 }
 
 async function main() {
+  if (process.argv.includes("--rebaseline")) return rebaseline();
   const year = Number(arg("year", "2026"));
   const limit = Number(arg("limit", "4000"));
   const resource = RESOURCES[year];
@@ -169,16 +198,19 @@ async function main() {
   console.log(`   ${blocks.length} geocoded (${Math.round((blocks.length / ranked.length) * 100)}%).\n`);
 
   console.log("4. Computing city baseline...");
+  const { deciles, tailMax, sampled } = baseline(blocks);
   const index: BlockIndex = {
     builtAt: new Date().toISOString(),
     year,
     radiusMiles: RADIUS_MILES,
-    baselineDeciles: baselineDeciles(blocks),
+    baselineDeciles: deciles,
+    tailMax,
     blocks,
   };
-  const path = new URL("../data/blocks.json", import.meta.url);
-  await writeFile(path, JSON.stringify(index));
+  await writeFile(INDEX_PATH, JSON.stringify(index));
+  console.log(`   ${sampled} blocks sampled`);
   console.log(`   deciles: ${index.baselineDeciles.join(", ")}`);
+  console.log(`   tailMax: ${tailMax}`);
   console.log(`\nWrote ${blocks.length} blocks to data/blocks.json\n`);
 }
 
