@@ -1,0 +1,15 @@
+{
+  "name": "reality-check-spike",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Scoring-engine spike for Reality Check. No UI, no dependencies.",
+  "scripts": {
+    "score": "node --experimental-strip-types --no-warnings src/index.ts",
+    "build-index": "node --experimental-strip-types --no-warnings src/buildIndex.ts",
+    "check": "node --experimental-strip-types --no-warnings src/selftest.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
