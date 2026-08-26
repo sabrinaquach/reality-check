@@ -1,0 +1,815 @@
+/*
+ * Tokens taken from the Reality Check Figma file (node 2135:6277). Kept as
+ * variables so the salmon and the greys are stated once -- the design uses
+ * black at three different opacities and it is easy to drift.
+ */
+:root {
+  --accent: #e8a8a0;
+  --accent-press: #dd968d;
+  --page: #ffffff;
+  --sunken: #f5f5f5;
+  --card: #ffffff;
+  --ink: #000000;
+  --ink-60: rgba(0, 0, 0, 0.6);
+  --ink-50: rgba(0, 0, 0, 0.5);
+  --ink-30: rgba(0, 0, 0, 0.3);
+  --hairline: rgba(0, 0, 0, 0.25);
+  --dashed: rgba(0, 0, 0, 0.24);
+  --scrim: rgba(217, 217, 217, 0.64);
+
+  --card-shadow: 0 0 4px 1px rgba(0, 0, 0, 0.08);
+  --panel-shadow: 0 0 8px 1px rgba(0, 0, 0, 0.08);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --pill: 40px;
+
+  /* Bands stay semantic; the design has no colour for them, so these are the
+     smallest additions that still read as good / moderate / poor. */
+  --good: #3f8f63;
+  --moderate: #b5822a;
+  --poor: #c05442;
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: Manrope, ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; }
+
+/* ---------- nav ---------- */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 30px 40px 21px;
+}
+.nav .logo { width: 26px; height: 23px; }
+.nav a {
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 500;
+  padding-bottom: .35rem;
+}
+.nav a.on { border-bottom: 1.5px solid var(--ink); }
+.nav .spacer { flex: 1; }
+.nav .signin {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius);
+  height: 39px;
+  padding: 0 1.25rem;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ---------- page ----------
+ * Figma node 2118:2789. The 1440 frame runs content from x=102 to x=1338:
+ * an 851px left column, 20px gutter, 365px right column. Both columns start
+ * at y=226 and their second row of headings both sit at y=558.
+ */
+.page { max-width: 1440px; margin: 0 auto; padding: 40px 102px 5rem; }
+@media (max-width: 1200px) { .page { padding-left: 40px; padding-right: 40px; } }
+@media (max-width: 700px) { .page { padding-left: 20px; padding-right: 20px; } }
+
+h1 { font-size: 36px; font-weight: 700; margin: 0 0 8px; }
+h2 { font-size: 24px; font-weight: 700; margin: 0; }
+h3 { font-size: 20px; font-weight: 700; margin: 0; }
+
+.commuting {
+  display: flex; align-items: center; gap: .5rem;
+  color: var(--ink-50); font-size: 16px;
+  margin: 0 0 16px;
+}
+.commuting button { background: none; border: 0; padding: 0; cursor: pointer; display: inline-flex; opacity: .5; }
+.commuting button:hover { opacity: 1; }
+.commuting img { width: 18px; height: 18px; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 365px;
+  gap: 42px 32px;
+  /* No align-items: the default stretch is what keeps row one level. */
+}
+.layout > * { min-width: 0; }
+@media (max-width: 64rem) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* Every level between the page grid and the scrolling rail has to be told it
+   may be narrower than its contents. Without all three, the 1424px-wide rail
+   sizes the whole column and the two-column layout tears apart. */
+.col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 41px;
+  align-content: start;
+  min-width: 0;
+}
+.col > * { min-width: 0; }
+.rail { min-width: 0; }
+
+/* ---------- comparison slots ---------- */
+.slots {
+  background: #fbfbfb;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius);
+  padding: 19px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 67px;
+  min-height: 291px;
+}
+.vs { align-self: center; font-size: 20px; font-weight: 700; color: var(--ink-50); }
+
+.slot {
+  border: 1px dashed var(--dashed);
+  border-radius: var(--radius-sm);
+  display: grid; place-items: center; align-content: center; gap: 12px;
+  color: var(--ink-50); font-size: 20px;
+  min-height: 252px; padding: 1rem;
+}
+.slot img { width: 46px; height: 46px; opacity: .5; }
+.slot.over { border-color: var(--accent); background: rgba(232, 168, 160, .12); }
+
+.slot.filled {
+  border-style: solid; border-color: transparent;
+  background: var(--card); box-shadow: var(--card-shadow);
+  display: block; padding: 18px 20px;
+  color: var(--ink); font-size: 16px;
+}
+.slot-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.slot-addr { font-weight: 500; font-size: 16px; }
+.slot-total { font-size: 40px; font-weight: 700; line-height: 1; }
+.slot-total.good { color: var(--good); }
+.slot-total.moderate { color: var(--moderate); }
+.slot-total.poor { color: var(--poor); }
+.slot-summary { font-size: 12px; color: var(--ink-50); margin: .4rem 0 1rem; }
+.slot .drop { background: none; border: 0; cursor: pointer; color: var(--ink-30); font-size: 12px; padding: 0; }
+.slot .drop:hover { color: var(--ink); }
+
+/* ---------- pillar rows inside a filled slot ---------- */
+.pillars { display: grid; gap: .7rem; }
+.pillar-row { display: grid; grid-template-columns: 72px 1fr auto; gap: .6rem; align-items: center; }
+.pillar-row .name { font-size: 12px; color: var(--ink-50); text-transform: capitalize; }
+.pillar-row .track { height: 5px; border-radius: 999px; background: rgba(0, 0, 0, .08); overflow: hidden; }
+.pillar-row .track i { display: block; height: 100%; border-radius: 999px; }
+.pillar-row.good .track i { background: var(--good); }
+.pillar-row.moderate .track i { background: var(--moderate); }
+.pillar-row.poor .track i { background: var(--poor); }
+.pillar-row .val { font-size: 12px; font-weight: 700; min-width: 1.6rem; text-align: right; }
+.pillar-row .headline { grid-column: 2 / -1; font-size: 12px; color: var(--ink-50); margin: -.35rem 0 0; }
+.pillar-row.out .name, .pillar-row.out .headline { color: var(--ink-30); }
+
+/* ---------- sidebar ---------- */
+.sidebar {
+  align-self: stretch;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 19px 34px 20px;
+  min-height: 291px;
+}
+.sidebar h3 { margin-bottom: 7px; }
+
+.inputs { border: .5px solid var(--hairline); border-radius: var(--radius-sm); }
+.input-row { display: flex; align-items: center; gap: .6rem; padding: 8px 12px; }
+.input-row + .input-row, .ac + .input-row { border-top: .5px solid var(--hairline); }
+.input-row img { width: 16px; height: 16px; opacity: .5; flex: none; }
+.input-row input {
+  border: 0; outline: 0; background: none; width: 100%;
+  font-family: inherit; font-size: 12px; line-height: 1.35; font-weight: 500; color: var(--ink);
+}
+.input-row input::placeholder { color: var(--ink-50); }
+
+.note { font-size: 12px; line-height: 1.35; color: var(--ink-50); margin: 10px 0 14px; }
+
+.btn {
+  display: block; width: 100%;
+  background: var(--accent); border: 0; border-radius: var(--pill);
+  height: 45px; font-size: 15px; font-weight: 500; color: var(--ink);
+  cursor: pointer; margin-bottom: .6rem;
+}
+.btn:last-child { margin-bottom: 0; }
+.btn:hover:not(:disabled) { background: var(--accent-press); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.ghost { background: none; border: 1px solid var(--hairline); }
+.btn.ghost:hover:not(:disabled) { background: var(--sunken); }
+
+.form-error { color: var(--poor); font-size: 12px; margin: 0 0 .75rem; }
+
+/* ---------- sections + carousels ---------- */
+.section-head { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 24px; }
+.section-head .sub { color: var(--ink-50); font-size: 16px; margin: 2px 0 0; }
+.carousel-nav { margin-left: auto; display: flex; gap: 6px; padding-top: 2px; }
+.carousel-nav button {
+  position: relative;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  width: 28px; height: 28px;
+}
+.carousel-nav button:hover { opacity: .75; }
+.carousel-nav .ring { position: absolute; inset: 0; width: 28px; height: 28px; }
+/* 19px chevrons in a 28px circle, positioned as the design places them: each
+   one nudged outward rather than dead-centred. Measured from node 2118:2789 --
+   left glyph 4px from the circle's left edge, right glyph 6px (3px from its
+   right edge), both 5px down. */
+.carousel-nav .glyph { position: absolute; top: 5px; width: 19px; height: 19px; }
+.carousel-nav .glyph-prev { left: 4px; }
+.carousel-nav .glyph-next { left: 6px; }
+
+.rail { display: flex; gap: 26px; overflow-x: auto; padding: 6px; margin: -6px; scroll-behavior: smooth; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+
+/* Card geometry is from the design: 264x110, text at 18px in, drag handle 7px
+   from the top-right corner. */
+.spot {
+  position: relative; flex: none;
+  width: 264px; min-height: 110px;
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--card-shadow);
+  padding: 16px 18px; text-align: left; border: 0; font-family: inherit;
+  cursor: grab; display: block;
+}
+.spot:hover { box-shadow: var(--panel-shadow); }
+.spot:active { cursor: grabbing; }
+.spot.dragging { opacity: .5; }
+.spot .addr { font-size: 16px; font-weight: 400; color: var(--ink); padding-right: 26px; }
+.spot .why { font-size: 12px; font-weight: 500; color: var(--ink-50); width: 244px; max-width: 100%; margin: 8px 0 0; }
+.spot .metric { font-size: 12px; font-weight: 500; color: var(--ink-60); margin: 12px 0 0; }
+.spot .metric span { color: var(--ink-50); }
+.spot .metric b.good { color: var(--good); }
+.spot .metric b.moderate { color: var(--moderate); }
+.spot .metric b.poor { color: var(--poor); }
+.spot .handle { position: absolute; top: 7px; right: 7px; width: 19px; height: 19px; opacity: .45; }
+
+.empty {
+  border: 1px dashed var(--dashed); border-radius: var(--radius-sm);
+  padding: 1.5rem; color: var(--ink-50); font-size: 14px;
+}
+.empty strong { display: block; color: var(--ink); font-weight: 700; font-size: 16px; margin-bottom: .35rem; }
+.empty.map { min-height: 337px; display: flex; flex-direction: column; justify-content: center; }
+.empty code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; background: rgba(0, 0, 0, .05);
+  padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+}
+
+/* ---------- modals ----------
+ * Geometry taken from Figma nodes 2135:6277 (what matters) and 2120:4169
+ * (log in). Both sit in a 466px box, both put the mark 63px from the top,
+ * both run their content at 387px wide. The offsets in the file are a few px
+ * off centre in opposite directions, so the content is centred here.
+ */
+.scrim {
+  position: fixed; inset: 0; z-index: 10;
+  background: var(--scrim);
+  display: grid; place-items: center; padding: 1.5rem;
+}
+.modal {
+  position: relative;
+  background: var(--card);
+  border-radius: var(--radius);
+  width: 466px; max-width: 100%;
+  min-height: 466px;
+  padding: 63px 0 40px;
+  max-height: 92vh; overflow-y: auto;
+}
+.modal-body { width: 387px; max-width: calc(100% - 72px); margin: 0 auto; }
+
+.modal .close {
+  position: absolute; top: 11px; right: 11px;
+  width: 24px; height: 24px;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  opacity: .8;
+}
+.modal .close:hover { opacity: 1; }
+.modal .close img { width: 24px; height: 24px; display: block; }
+
+.modal .mark { width: 43px; height: 38px; display: block; margin: 0 auto 23px; }
+.modal h3 { font-size: 20px; font-weight: 700; margin: 0 0 30px; }
+.modal h3.center { text-align: center; }
+
+.modal label { display: block; font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+
+/* The "what matters" modal draws its inputs at a heavier 0.5 border; the log
+   in modal uses the lighter 0.25 hairline. Kept distinct rather than merged. */
+.modal .field {
+  border: 1px solid var(--ink-50); border-radius: var(--radius-sm);
+  display: flex; align-items: center; gap: .5rem;
+  padding: 0 8px; height: 42px;
+}
+.modal .field img { width: 24px; height: 24px; opacity: .6; flex: none; }
+.modal .field input {
+  border: 0; outline: 0; background: none; width: 100%;
+  font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink);
+}
+.modal .field input::placeholder { color: var(--ink-50); }
+
+.modal .gap { height: 55px; }
+
+.choices { display: flex; gap: 7.5px; }
+.choice {
+  flex: 1; height: 42px;
+  border: 1px solid var(--ink-50); border-radius: var(--radius-sm);
+  background: none; color: var(--ink-50);
+  font-size: 16px; font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+}
+.choice.on { background: var(--accent); border-color: var(--accent); color: var(--ink); }
+.choice b {
+  font-size: 11px; font-weight: 700;
+  background: rgba(255, 255, 255, .65); border-radius: 999px;
+  width: 17px; height: 17px; display: grid; place-items: center;
+}
+
+/* Buttons in modals are 8px-radius blocks, not the pill used in the sidebar. */
+.modal .action {
+  display: block; width: 100%; height: 45px;
+  margin-top: 30px;
+  background: var(--accent); border: 0; border-radius: var(--radius-sm);
+  font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink);
+  cursor: pointer;
+}
+.modal .action:hover:not(:disabled) { background: var(--accent-press); }
+.modal .action:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- log in modal ---------- */
+.auth-field {
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  height: 50px; display: flex; align-items: center; padding: 0 17px;
+  margin-top: 26px;
+}
+.auth-field input {
+  border: 0; outline: 0; background: none; width: 100%;
+  font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink);
+}
+.auth-field input::placeholder { color: var(--ink-50); }
+.modal .action.auth { margin-top: 10px; }
+
+.or {
+  display: flex; align-items: center; gap: 13px;
+  margin: 23px 0;
+  color: rgba(0, 0, 0, 0.28); font-size: 16px; font-weight: 500;
+}
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; height: 45px;
+  background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  font-family: Inter, Manrope, ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px; font-weight: 600; color: var(--ink);
+  cursor: pointer;
+}
+.google-btn:hover:not(:disabled) { background: var(--sunken); }
+.google-btn:disabled { opacity: .55; cursor: not-allowed; }
+.google-btn img { width: 30px; height: 30px; }
+
+.modal .disclaimer { font-size: 12px; color: var(--ink-50); margin: 20px 0 0; text-align: center; }
+
+/* ---------- address autocomplete ---------- */
+.ac { position: relative; }
+.ac-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  margin: 0; padding: .3rem; list-style: none;
+  background: var(--card); border-radius: var(--radius-sm);
+  box-shadow: var(--panel-shadow);
+  overflow-y: auto;
+}
+/* Opens above the field, for panels whose buttons sit underneath it. */
+.ac-list.up { top: auto; bottom: calc(100% + 4px); }
+.ac-list li {
+  padding: .5rem .6rem; border-radius: 6px; cursor: pointer;
+  display: flex; flex-direction: column; gap: .1rem;
+}
+.ac-list li.on { background: var(--sunken); }
+.ac-main { font-size: 14px; font-weight: 500; color: var(--ink); }
+.ac-sub { font-size: 12px; font-weight: 500; color: var(--ink-50); }
+
+/* ---------- single-listing result page ----------
+ * Figma node 2136:6532. Content runs 956px wide; the pillar cards are 924
+ * with a 111px body, and the amenities card grows to hold its list.
+ */
+.rc { max-width: 956px; margin: 0 auto; }
+
+.rc-top { display: flex; align-items: center; margin-bottom: 22px; }
+.rc-top .spacer { flex: 1; }
+.circle {
+  position: relative; width: 39px; height: 39px;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  display: grid; place-items: center;
+}
+.circle:disabled { cursor: not-allowed; opacity: .75; }
+.circle .ring { position: absolute; inset: 0; width: 39px; height: 39px; }
+.circle .glyph { position: relative; }
+
+.rc h1 { font-size: 36px; font-weight: 700; margin: 0 0 22px; }
+
+.rc-meta {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--ink-50); font-size: 16px; font-weight: 400;
+  margin-bottom: 3px;
+}
+.rc-dot { width: 6px; height: 6px; }
+.rc-score {
+  margin-left: auto;
+  min-width: 102px; height: 28px;
+  border-radius: var(--pill);
+  display: inline-grid; place-items: center;
+  padding: 0 14px;
+  font-size: 16px; font-weight: 400; color: var(--ink);
+  background: #eee;
+}
+.rc-score.good { background: #95eb95; }
+.rc-score.moderate { background: #f8fac4; }
+.rc-score.poor { background: #fadcd8; }
+
+.rc-summary { font-size: 16px; font-weight: 400; color: var(--ink); margin: 0 0 32px; }
+
+.rc-section { margin-bottom: 34px; }
+.rc-section h2 { margin-bottom: 22px; }
+.rc-section h3 { margin: 0; }
+.rc-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: 1px 0 7px; }
+
+.rc-card {
+  position: relative;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  min-height: 111px;
+  padding: 18px 25px;
+}
+.rc-card.tall { min-height: 278px; }
+.rc-card.out { opacity: .7; }
+
+.rc-chip {
+  display: inline-grid; place-items: center;
+  height: 25px; min-width: 59px; padding: 0 12px;
+  border-radius: 24px;
+  background: #eee;
+  font-size: 12px; color: var(--ink-50);
+}
+.rc-chip.good { background: #d8f8d8; }
+.rc-chip.moderate { background: #f8fac4; }
+.rc-chip.poor { background: #fadcd8; }
+
+.rc-headline { font-size: 16px; font-weight: 600; margin: 14px 0 0; padding-right: 120px; }
+.rc-detail { font-size: 16px; font-weight: 500; color: var(--ink-50); margin: 5px 0 0; padding-right: 120px; }
+
+/* Centred on the 111px card header rather than pinned to a fixed offset: the
+   car is 48px and the other two are 42px, so one hard-coded top left the car
+   sitting low. Anchoring to the middle centres any size, and keeps the icon
+   with the headline when the commute card expands. */
+/* The icon lives inside the card's header block and centres on it.
+ *
+ * It used to sit at a hard-coded top: 55.5px -- half of the design's 111px
+ * card. Real cards run taller than that whenever the detail line wraps, so
+ * the icon floated above the true centre, and on the expanded commute card it
+ * was further out still. Centring on .rc-head is correct at any height, and
+ * keeps the icon with the headline rather than drifting down into the
+ * expanded travel-mode list.
+ *
+ * Anchored by its LEFT edge, which is how the design lines them up: node
+ * 2136:6532 puts the 48px car and the 42px warning at the same left offset,
+ * so the bigger one simply reaches further right. The inline `right` is
+ * computed per icon size in RealityCheckPage. */
+.rc-head { position: relative; min-height: 75px; }
+.rc-icon {
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+}
+.rc-chev { position: absolute; right: 15px; top: 13px; width: 21px; height: 21px; opacity: .8; }
+
+.rc-amenities { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; margin-top: 24px; }
+.rc-amenities ul { list-style: none; margin: 0; padding: 0; }
+.rc-amenities ul + ul { border-left: 1px solid var(--line, rgba(0,0,0,.1)); padding-left: 32px; }
+.rc-amenities li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  font-size: 16px; font-weight: 500; color: var(--ink-50);
+  padding-bottom: 16px;
+}
+.rc-amenities .a-name { color: var(--ink-50); }
+.rc-amenities .a-dist { white-space: nowrap; }
+.rc-amenities .a-note { grid-column: 1 / -1; margin-top: 2px; }
+
+.empty.map.tall { min-height: 404px; }
+
+/* ---------- nav links as buttons (they switch tabs now) ---------- */
+.navlink {
+  background: none; border: 0; padding: 0 0 .35rem; cursor: pointer;
+  font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink);
+  border-bottom: 1.5px solid transparent;
+}
+.navlink.on { border-bottom-color: var(--ink); }
+
+/* ---------- saved tab ----------
+ * No design node for this screen; the pill-bar node 2169:7396 is the map
+ * callout, not this. Cards keep the two visually distinct.
+ */
+.saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 20px; }
+.saved-card {
+  position: relative;
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--card-shadow);
+}
+.saved-open {
+  display: grid; gap: 6px; width: 100%;
+  background: none; border: 0; cursor: pointer; text-align: left;
+  font-family: inherit; padding: 18px 20px 8px;
+}
+.saved-addr { font-size: 16px; font-weight: 500; color: var(--ink); padding-right: 34px; }
+.saved-meta, .saved-line { font-size: 12px; font-weight: 500; color: var(--ink-50); }
+.saved-open .rc-score { margin: 8px 0 0; justify-self: start; }
+.saved-actions { display: flex; gap: 8px; padding: 0 20px 18px; }
+.saved-add {
+  height: 34px; padding: 0 16px;
+  background: var(--accent); border: 0; border-radius: var(--pill);
+  font-family: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+}
+.saved-add:hover:not(:disabled) { background: var(--accent-press); }
+.saved-add:disabled { opacity: .5; cursor: not-allowed; }
+.saved-heart {
+  position: absolute; top: 14px; right: 14px;
+  width: 24px; height: 24px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+}
+.saved-heart img { width: 24px; height: 24px; display: block; }
+.saved-heart:hover { opacity: .7; }
+
+/* ---------- map ---------- */
+.zone {
+  position: relative;
+  border: .5px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #f0f0f0;
+}
+.zone-canvas { position: absolute; inset: 0; }
+.zone-error {
+  position: absolute; left: 16px; bottom: 16px; right: 16px;
+  background: var(--card); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 12px; color: var(--poor);
+}
+
+/* Stacked at the map's top-left, matching the design's pill column. */
+.zone-pills { position: absolute; top: 16px; left: 16px; display: grid; gap: 7px; z-index: 2; }
+.zone-pill {
+  width: 77px; height: 29px;
+  border: 0; border-radius: var(--pill);
+  background: rgba(145, 145, 145, 0.31);
+  color: rgba(0, 0, 0, 0.3);
+  font-family: Inter, Manrope, sans-serif; font-size: 12px;
+  cursor: pointer;
+}
+.zone-pill.on { background: #919191; color: var(--ink); }
+.zone-pill:disabled { cursor: not-allowed; opacity: .55; }
+
+/* The ring was an exported SVG filled #D9D9D9 -- the only circle in the set
+   that was not #FBFBFB, and not recolourable from CSS. Drawn here instead so
+   it matches the others exactly: #FBFBFB with a 1px black border at 5%. The
+   border sits inside the 27px box (box-sizing is border-box globally), which
+   is where the SVG circles draw their stroke too. */
+.zone-expand {
+  position: absolute; top: 16px; right: 16px; z-index: 2;
+  width: 27px; height: 27px; padding: 0;
+  background: #FBFBFB;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.zone-expand:hover { background: #ffffff; }
+
+/* The two glyphs sit differently inside their viewBoxes -- maximize fills 89%
+   of an 18px box, the cross only 58% of a 24px one -- so equal pixel sizes
+   would render the cross noticeably smaller. Sized to match optically. */
+.zone-expand .glyph { display: block; }
+.zone-expand .glyph-open { width: 14px; height: 14px; }
+.zone-expand .glyph-close { width: 21px; height: 21px; }
+
+/* Mapbox's own chrome, toned down to match the page. */
+.zone .mapboxgl-ctrl-bottom-left,
+.zone .mapboxgl-ctrl-bottom-right { font-size: 10px; }
+
+/* ---------- expanded map ---------- */
+.zone-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); }
+/* Lifted with position, not by reparenting -- see the comment in ZoneMap. */
+.zone.expanded {
+  position: fixed; inset: 32px; z-index: 61;
+  height: auto;
+  box-shadow: var(--panel-shadow);
+}
+.zone.expanded .zone-pills { top: 20px; left: 20px; }
+.zone.expanded .zone-expand { top: 20px; right: 20px; }
+
+/* ---------- heatmap legend ---------- */
+.zone-legend {
+  position: absolute; left: 16px; bottom: 34px; z-index: 3;
+  background: var(--card); border-radius: var(--radius-sm);
+  box-shadow: var(--card-shadow);
+  padding: 10px; display: grid; gap: 2px; min-width: 168px;
+}
+.zone-legend-title {
+  margin: 0 2px 4px; font-size: 11px; font-weight: 700;
+  color: var(--ink-50); text-transform: uppercase; letter-spacing: .05em;
+}
+.zone-band {
+  display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 8px;
+  background: none; border: 0; border-radius: 6px; padding: 5px 6px;
+  font-family: inherit; font-size: 12px; color: var(--ink); cursor: pointer; text-align: left;
+}
+.zone-band:hover:not(:disabled) { background: var(--sunken); }
+.zone-band.on { background: var(--sunken); font-weight: 700; }
+.zone-band:disabled { opacity: .4; cursor: not-allowed; }
+.zone-band .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); }
+.zone-band .cnt { color: var(--ink-50); font-variant-numeric: tabular-nums; }
+.zone-band.clear {
+  grid-template-columns: 1fr; margin-top: 4px;
+  border-top: 1px solid var(--sunken); border-radius: 0;
+  color: var(--ink-50); font-size: 11px; padding-top: 8px;
+}
+
+/* ---------- streets in the selected band ----------
+ * Grouped by street and capped, so a band holding 961 blocks opens as a dozen
+ * readable rows rather than a wall of near-identical addresses.
+ */
+.zone-list {
+  position: absolute; top: 16px; right: 56px; bottom: 16px; z-index: 3;
+  width: 296px; display: flex; flex-direction: column;
+  background: var(--card); border-radius: var(--radius-sm); box-shadow: var(--panel-shadow);
+  overflow: hidden;
+}
+.zone-list-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+/* Tinted to the band being listed, using the same pale fills as the chips on a
+   listing's pillar cards -- so the colour means the same thing in both places. */
+.zone-list-head.good { background: #d8f8d8; }
+.zone-list-head.moderate { background: #f8fac4; }
+.zone-list-head.poor { background: #fadcd8; }
+.zone-list-head strong { display: block; font-size: 14px; }
+.zone-list-head span { font-size: 11px; color: var(--ink-50); }
+.zone-list-head > button {
+  background: none; border: 0; cursor: pointer; font-size: 18px; line-height: 1;
+  color: var(--ink-50); padding: 0 2px;
+}
+.zone-list-head > button:hover { color: var(--ink); }
+
+.zone-list ul { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
+.zone-list li {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  border-radius: 8px;
+}
+.zone-list li:hover { background: var(--sunken); }
+
+/* Roomier than the old one-line rows: the street reads first, the numbers
+   sit under it in a lighter weight instead of competing on the same line. */
+.zone-street {
+  display: grid; gap: 3px; width: 100%;
+  background: none; border: 0; padding: 9px 4px 9px 10px;
+  font-family: inherit; cursor: pointer; text-align: left;
+}
+.zone-street .a { font-size: 13px; color: var(--ink); }
+.zone-street .n { font-size: 11px; color: var(--ink-50); }
+
+.zone-more {
+  border: 0; border-top: 1px solid var(--sunken);
+  background: none; width: 100%; padding: 11px;
+  font-family: inherit; font-size: 12px; color: var(--ink-50); cursor: pointer;
+}
+.zone-more:hover { background: var(--sunken); color: var(--ink); }
+
+/* ---------- check straight from the map ---------- */
+.zone-list li { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.zone-check {
+  background: var(--accent); border: 0; border-radius: 999px;
+  font-family: inherit; font-size: 11px; font-weight: 600; color: var(--ink);
+  padding: 4px 10px; margin-right: 6px; cursor: pointer;
+}
+.zone-check:hover { background: var(--accent-press); }
+
+/* Figma node 2169:7396: a 61px bar at 40px radius with the address and rent
+   left and a 133x45 pill right, sized to the design's 370px so the button
+   stays beside the text. White with a shadow, and an accent button.
+   The node labels the button "Add listing"; it reads "Check listing" here
+   because it opens the listing's reality check rather than adding it. */
+.picked-bar {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 12px;
+  width: min(370px, calc(100% - 32px)); min-height: 61px;
+  padding: 8px 8px 8px 26px;
+  background: var(--card); border-radius: var(--pill);
+  box-shadow: var(--panel-shadow);
+}
+.picked-text {
+  flex: 1; min-width: 0; display: grid; gap: 2px;
+  font-family: Inter, Manrope, sans-serif;
+}
+.picked-addr {
+  font-size: 15px; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.picked-rent { font-size: 12px; color: rgba(0, 0, 0, 0.5); }
+.picked-rent b { font-weight: 400; color: var(--ink); }
+.picked-add {
+  flex: none; width: 133px; height: 45px;
+  background: var(--accent); border: 0; border-radius: var(--pill);
+  font-family: Inter, Manrope, sans-serif; font-size: 15px; color: var(--ink);
+  cursor: pointer;
+}
+.picked-add:hover:not(:disabled) { background: var(--accent-press); }
+.picked-add:disabled { opacity: .55; cursor: not-allowed; }
+
+/* A card action that sits below the card's own text. */
+.spot { position: relative; }
+.spot-check { position: absolute; right: 14px; bottom: 12px; margin: 0; }
+.spot .metric { padding-right: 64px; }
+
+.linky {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: 12px; color: var(--ink);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.linky:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Legend rows that are labels, not filters (the commute bands). */
+.zone-band.static { cursor: default; }
+.zone-band.static:hover { background: none; }
+.zone-band .sw.line {
+  background: #e8a8a0; height: 3px; border-radius: 2px; border: 0; align-self: center;
+}
+
+/* ---------- filling in a missing rent ---------- */
+.rent-prompt { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.rent-field {
+  display: flex; align-items: center; gap: 8px;
+  height: 45px; padding: 0 14px; width: 260px; max-width: 100%;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.rent-field img { width: 20px; height: 20px; opacity: .5; flex: none; }
+.rent-field input {
+  border: 0; outline: 0; background: none; width: 100%;
+  font-family: inherit; font-size: 15px; font-weight: 500; color: var(--ink);
+}
+.rent-field input::placeholder { color: var(--ink-50); }
+.rent-go {
+  height: 45px; padding: 0 20px;
+  background: var(--accent); border: 0; border-radius: var(--radius-sm);
+  font-family: inherit; font-size: 15px; color: var(--ink); cursor: pointer;
+}
+.rent-go:hover:not(:disabled) { background: var(--accent-press); }
+.rent-go:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- commute card, expanded ---------- */
+.rc-card.open { padding-bottom: 20px; }
+.rc-card.open .rc-head { min-height: 0; }
+.rc-chev {
+  position: absolute; right: 15px; top: 13px;
+  width: 21px; height: 21px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  opacity: .8;
+}
+.rc-chev:hover { opacity: 1; }
+.rc-chev img { width: 21px; height: 21px; display: block; transition: transform .18s; }
+.rc-card.open .rc-chev img { transform: rotate(180deg); }
+
+.rc-modes { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--sunken); }
+.rc-mode {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center; gap: 12px;
+  padding: 8px 0;
+  font-size: 16px;
+}
+/* Drawn on a 24px grid at 2px stroke, same as every other icon here. */
+.rc-mode .m-icon { width: 20px; height: 20px; display: block; }
+.rc-mode + .rc-mode { border-top: 1px solid rgba(0, 0, 0, .04); }
+.rc-mode .m-label { color: var(--ink); }
+.rc-mode .m-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rc-modes-head {
+  font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-50); margin: 0 0 6px;
+}
+
+/* ---------- map filling its column ----------
+ * The right column already stretches to the left one; the map inside it was
+ * pinned to 337px, so it stopped short. This lets the section, and the map in
+ * it, take whatever height the row ends up being.
+ */
+.col.fill { align-content: stretch; grid-template-rows: 1fr; }
+.col.fill > section { display: flex; flex-direction: column; min-height: 0; }
+.col.fill > section > .section-head { flex: none; }
+.zone.fill { flex: 1; min-height: 240px; }
+.col.fill > section > .empty.map { flex: 1; min-height: 240px; }

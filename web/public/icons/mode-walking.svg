@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="trekking">
+<path id="primary" d="M12 7C13.1046 7 14 6.10457 14 5C14 3.89543 13.1046 3 12 3C10.8954 3 10 3.89543 10 5C10 6.10457 10.8954 7 12 7Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="primary_2" d="M19 10L16.72 10.76C16.5124 10.8268 16.2886 10.8238 16.0828 10.7516C15.877 10.6794 15.7004 10.5419 15.58 10.36L14.58 8.89C14.3986 8.61813 14.1534 8.39485 13.8657 8.2397C13.5781 8.08454 13.2568 8.00224 12.93 8H10.24C10.0835 8.00094 9.92932 8.03862 9.79 8.11L6.3 9.85C6.105 9.94699 5.94699 10.105 5.85 10.3L5 12" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="primary_3" d="M10 8.05C10 8.05 10 11.42 10 13.72C9.99887 14.1064 10.1097 14.4849 10.3191 14.8097C10.5285 15.1344 10.8275 15.3916 11.18 15.55C11.92 15.87 12.67 16.17 13.31 16.41C13.7688 16.584 14.1477 16.9206 14.3745 17.3557C14.6013 17.7909 14.6602 18.2942 14.54 18.77L14 21" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="primary_4" d="M11.18 15.7L8 21" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="primary_5" d="M14 12V8.45" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

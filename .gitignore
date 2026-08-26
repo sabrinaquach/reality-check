@@ -1,1 +1,8 @@
 .DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Never commit keys. spike/.gitignore covers its own; this covers every dir.
+.env
+.env.local

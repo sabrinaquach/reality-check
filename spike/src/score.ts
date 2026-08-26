@@ -1,3 +1,4 @@
+import { bandFor, GOOD, MODERATE } from "./bands.ts";
 import { scoreAmenities } from "./sources/amenities.ts";
 import { scoreCommute } from "./sources/commute.ts";
 import { scoreCost } from "./sources/cost.ts";
@@ -56,7 +57,7 @@ function summarize(score: number | null, pillars: Pillar[], priorities: Priority
     return `Not enough data to score this listing — ${missing.join(", ")} unavailable.`;
   }
 
-  const verdict = score >= 67 ? "Looks solid" : score >= 34 ? "Worth a look, with caveats" : "Hard to recommend";
+  const verdict = score >= GOOD ? "Looks solid" : score >= MODERATE ? "Worth a look, with caveats" : "Hard to recommend";
   // Lead with whatever the renter said they cared about, then the worst pillar.
   const top = live.find((p) => p.key === priorities[0]);
   const worst = [...live].sort((a, b) => a.score - b.score)[0];
@@ -65,6 +66,27 @@ function summarize(score: number | null, pillars: Pillar[], priorities: Priority
   if (worst && worst.key !== top?.key && worst.band !== "good") parts.push(`${worst.key} is the weak point`);
   const tail = parts.length ? ` — ${parts.join("; ")}.` : ".";
   return `${verdict}${tail}`;
+}
+
+/**
+ * Swap one pillar for a freshly computed version and recompute everything that
+ * depends on it.
+ *
+ * Exists so a caller can rescore a single pillar -- entering a rent after the
+ * fact, say -- without paying to re-run the three that did not change. The
+ * composite, band and summary all follow from the pillar set, so they are
+ * derived here rather than left to the caller to reproduce.
+ */
+export function withPillar(check: RealityCheck, next: Pillar): RealityCheck {
+  const pillars = check.pillars.map((p) => (p.key === next.key ? next : p));
+  const { score } = composite(pillars, check.priorities);
+  return {
+    ...check,
+    pillars,
+    score,
+    band: score === null ? null : bandFor(score),
+    summary: summarize(score, pillars, check.priorities),
+  };
 }
 
 export async function realityCheck(
@@ -82,5 +104,13 @@ export async function realityCheck(
   ]);
 
   const { score } = composite(pillars, priorities);
-  return { listing, commuteTo, priorities, score, summary: summarize(score, pillars, priorities), pillars };
+  return {
+    listing,
+    commuteTo,
+    priorities,
+    score,
+    band: score === null ? null : bandFor(score),
+    summary: summarize(score, pillars, priorities),
+    pillars,
+  };
 }

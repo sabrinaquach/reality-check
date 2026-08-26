@@ -1,3 +1,4 @@
+import { bandFor } from "../bands.ts";
 import { milesBetween } from "../geocode.ts";
 import type { LatLng, Pillar } from "../types.ts";
 import { readFile } from "node:fs/promises";
@@ -157,7 +158,7 @@ export async function scoreSafety(at: LatLng): Promise<Pillar> {
   // invert: fewer weighted incidents than most of the city == a higher score.
   const score = Math.round(100 - percentileOf(weight, index.baselineDeciles, index.tailMax));
 
-  const band = score >= 67 ? "good" : score >= 34 ? "moderate" : "poor";
+  const band = bandFor(score);
   const headline =
     band === "good" ? "Safe area" : band === "moderate" ? "Mixed area" : "Higher incident area";
   const comparison =

@@ -1,3 +1,4 @@
+import { bandFor } from "../bands.ts";
 import { milesBetween } from "../geocode.ts";
 import type { LatLng, Pillar } from "../types.ts";
 
@@ -9,13 +10,21 @@ const NEARBY = "https://places.googleapis.com/v1/places:searchNearby";
  * option, and groceries and transit count for more than a gym.
  */
 const CATEGORIES = [
-  { key: "groceries", label: "grocery", weight: 2, types: ["supermarket", "grocery_store"] },
-  { key: "transit", label: "transit stop", weight: 1.5, types: ["transit_station", "light_rail_station", "bus_station"] },
-  { key: "food", label: "restaurant", weight: 1, types: ["restaurant", "cafe"] },
-  { key: "parks", label: "park", weight: 1, types: ["park"] },
-  { key: "pharmacy", label: "pharmacy", weight: 1, types: ["pharmacy", "drugstore"] },
-  { key: "gym", label: "gym", weight: 0.5, types: ["gym", "fitness_center"] },
+  { key: "groceries", label: "groceries", icon: "\u{1F6D2}", weight: 2, types: ["supermarket", "grocery_store"] },
+  { key: "transit", label: "transit", icon: "\u{1F689}", weight: 1.5, types: ["transit_station", "light_rail_station", "bus_station"] },
+  { key: "food", label: "food", icon: "\u{1F374}", weight: 1, types: ["restaurant", "cafe"] },
+  { key: "parks", label: "a park", icon: "\u{1F333}", weight: 1, types: ["park"] },
+  { key: "pharmacy", label: "the pharmacy", icon: "\u{1F48A}", weight: 1, types: ["pharmacy", "drugstore"] },
+  { key: "gym", label: "the gym", icon: "\u{1F3CB}\u{FE0F}", weight: 0.5, types: ["gym", "fitness_center"] },
 ] as const;
+
+/** A quarter mile is a stroll, half a mile a walk; past that you drive. */
+function howFar(miles: number, label: string): string {
+  if (miles <= 0.25) return `A couple of minutes on foot for ${label}.`;
+  if (miles <= 0.5) return `A short walk for ${label}.`;
+  if (miles <= 1) return `Walkable for ${label}, or a two-minute drive.`;
+  return `A short drive for ${label}.`;
+}
 
 const SEARCH_RADIUS_M = 3_200; // ~2 mi, the distance where the score bottoms out
 
@@ -105,7 +114,19 @@ export async function scoreAmenities(at: LatLng): Promise<Pillar> {
     total += cat.weight;
   }
   const score = Math.round(weighted / total);
-  const band = score >= 67 ? "good" : score >= 34 ? "moderate" : "poor";
+  const band = bandFor(score);
+
+  // Surface the per-category detail so a results view can list it rather than
+  // re-querying Places for something we already paid for.
+  const items = found
+    .filter((f): f is { cat: (typeof CATEGORIES)[number]; hit: { miles: number; name: string } } => f.hit !== null)
+    .sort((a, b) => a.hit.miles - b.hit.miles)
+    .map(({ cat, hit }) => ({
+      icon: cat.icon,
+      name: hit.name,
+      note: howFar(hit.miles, cat.label),
+      miles: hit.miles,
+    }));
 
   const grocery = found.find(({ cat }) => cat.key === "groceries")?.hit;
   const walkable = found.filter(({ hit }) => hit && hit.miles <= 0.5).length;
@@ -116,5 +137,5 @@ export async function scoreAmenities(at: LatLng): Promise<Pillar> {
     `${walkable} of ${CATEGORIES.length} daily errands within a half-mile walk` +
     (grocery ? ` (nearest market: ${grocery.name}).` : ".");
 
-  return { ...base, score, band, headline, detail };
+  return { ...base, score, band, headline, detail, items };
 }

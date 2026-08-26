@@ -7,6 +7,7 @@ import { commuteScore } from "./sources/commute.ts";
 import { costScore } from "./sources/cost.ts";
 import { proximityScore } from "./sources/amenities.ts";
 import { percentileOf } from "./sources/safety.ts";
+import { bandFor, GOOD, MODERATE } from "./bands.ts";
 import { composite, weightFor } from "./score.ts";
 import type { Pillar, Priority } from "./types.ts";
 
@@ -48,6 +49,17 @@ check("the tail is continuous at the top decile", percentileOf(900, deciles, 203
 check("nothing beats the worst sampled neighbourhood", percentileOf(9999, deciles, 2033) === 100);
 check("the tail stays inside the top decile band", percentileOf(1200, deciles, 2033) > 90);
 check("a tailMax below the top decile is ignored", percentileOf(5000, deciles, 500) === 100);
+
+console.log("\nbands");
+check("the top of the range is good", bandFor(100) === "good");
+check("the bottom of the range is poor", bandFor(0) === "poor");
+check("the cutoffs are inclusive", bandFor(GOOD) === "good" && bandFor(MODERATE) === "moderate");
+check("just under a cutoff drops a band", bandFor(GOOD - 1) === "moderate" && bandFor(MODERATE - 1) === "poor");
+// The places we calibrated against, so a future retune has to face them.
+check("Almaden Valley (90) reads good", bandFor(90) === "good");
+check("Willow Glen (61) reads good", bandFor(61) === "good");
+check("Berryessa (38) reads moderate", bandFor(38) === "moderate");
+check("Downtown (2) reads poor", bandFor(2) === "poor");
 
 console.log("\nweighting");
 const priorities: Priority[] = ["safety", "commute"];

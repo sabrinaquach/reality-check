@@ -1,3 +1,4 @@
+import { bandFor } from "../bands.ts";
 import type { LatLng, Pillar } from "../types.ts";
 
 const GEOGRAPHIES = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates";
@@ -119,7 +120,7 @@ export async function scoreCost(at: LatLng, rent?: number): Promise<Pillar> {
 
   const ratio = rent / median.rent;
   const score = costScore(ratio);
-  const band = score >= 67 ? "good" : score >= 34 ? "moderate" : "poor";
+  const band = bandFor(score);
   const pct = Math.round((ratio - 1) * 100);
   const comparison =
     Math.abs(pct) <= 5

@@ -1,4 +1,5 @@
-import type { LatLng, Pillar } from "../types.ts";
+import { bandFor } from "../bands.ts";
+import type { LatLng, Pillar, Route } from "../types.ts";
 
 const DIRECTIONS = "https://maps.googleapis.com/maps/api/directions/json";
 
@@ -24,12 +25,14 @@ export function commuteScore(minutes: number): number {
   return Math.max(0, Math.min(100, Math.round(100 - (minutes - 10) * 2)));
 }
 
-type Leg = { minutes: number; miles: number };
+type Leg = { minutes: number; miles: number; route?: Route };
+
+export type TravelMode = "driving" | "transit" | "walking" | "bicycling";
 
 async function directions(
   from: LatLng,
   to: string,
-  mode: "driving" | "transit",
+  mode: TravelMode,
   key: string,
 ): Promise<Leg | null> {
   const params: Record<string, string> = {
@@ -45,15 +48,60 @@ async function directions(
       signal: AbortSignal.timeout(20_000),
     });
     const body = (await res.json()) as any;
-    const leg = body?.routes?.[0]?.legs?.[0];
+    const top = body?.routes?.[0];
+    const leg = top?.legs?.[0];
     if (!leg) return null;
     // duration_in_traffic is only present for driving with a departure time.
     const seconds = leg.duration_in_traffic?.value ?? leg.duration?.value;
     if (!Number.isFinite(seconds)) return null;
-    return { minutes: Math.round(seconds / 60), miles: (leg.distance?.value ?? 0) / 1609.34 };
+
+    // The shape of the route comes back on the same response, so keeping it
+    // costs nothing -- drawing the commute later would otherwise mean paying
+    // for a second identical call.
+    const line = top?.overview_polyline?.points;
+    const b = top?.bounds;
+    const route: Route | undefined =
+      line && b
+        ? {
+            polyline: line,
+            bounds: {
+              north: b.northeast.lat,
+              south: b.southwest.lat,
+              east: b.northeast.lng,
+              west: b.southwest.lng,
+            },
+          }
+        : undefined;
+
+    return { minutes: Math.round(seconds / 60), miles: (leg.distance?.value ?? 0) / 1609.34, route };
   } catch {
     return null;
   }
+}
+
+export type ModeTime = { mode: TravelMode; minutes: number; miles: number };
+
+/**
+ * The same trip by the modes the pillar does not already report.
+ *
+ * Driving is excluded by default: it is the number in the pillar's headline,
+ * so listing it again says nothing and costs an extra call. Rideshare is
+ * absent for a different reason -- Uber and Lyft have no public ETA or fare
+ * API, and a made-up number is worse than no number.
+ */
+export async function commuteModes(
+  at: LatLng,
+  destination: string,
+  modes: TravelMode[] = ["transit", "bicycling", "walking"],
+): Promise<ModeTime[]> {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key || !destination.trim()) return [];
+
+  const legs = await Promise.all(modes.map((m) => directions(at, destination, m, key)));
+  return modes
+    .map((mode, i) => ({ mode, leg: legs[i] }))
+    .filter((x): x is { mode: TravelMode; leg: Leg } => x.leg !== null)
+    .map(({ mode, leg }) => ({ mode, minutes: leg.minutes, miles: leg.miles }));
 }
 
 export async function scoreCommute(at: LatLng, destination: string): Promise<Pillar> {
@@ -99,7 +147,7 @@ export async function scoreCommute(at: LatLng, destination: string): Promise<Pil
   }
 
   const score = commuteScore(drive.minutes);
-  const band = score >= 67 ? "good" : score >= 34 ? "moderate" : "poor";
+  const band = bandFor(score);
   const transitNote = transit
     ? ` Transit is ${transit.minutes} min.`
     : " No usable transit route.";
@@ -108,6 +156,7 @@ export async function scoreCommute(at: LatLng, destination: string): Promise<Pil
     ...base,
     score,
     band,
+    route: drive.route,
     headline: `${drive.minutes} min drive`,
     detail:
       `${drive.miles.toFixed(1)} mi to ${destination} in typical 8am traffic.` + transitNote,
