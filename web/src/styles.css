@@ -21,6 +21,8 @@
   --panel-shadow: 0 0 8px 1px rgba(0, 0, 0, 0.08);
   --radius: 12px;
   --radius-sm: 8px;
+  /* Every heading sits this far above its subtitle, on every screen. */
+  --sub-gap: 4px;
   --pill: 40px;
 
   /* Bands stay semantic; the design has no colour for them, so these are the
@@ -119,56 +121,170 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .rail { min-width: 0; }
 
 /* ---------- comparison slots ---------- */
+/* One pixel, no ink: the thing the stuck-detector watches. */
+.stick-sentinel { height: 1px; margin-bottom: -1px; }
+
 .slots {
+  /* Parked at the top while the rails scroll past underneath, so a card can be
+     dragged into a slot from anywhere on the page. Before the third rail
+     existed the box was never more than a screen away; now the bottom rail
+     sits some 900px below it, which put the only drop target out of reach. */
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  transition: padding .18s ease, min-height .18s ease, box-shadow .18s ease;
   background: #fbfbfb;
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: var(--radius);
   padding: 19px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 67px;
+  /* Column gap only -- a row gap would push the compare button most of a slot's
+     height below them.
+     The design's 67px gutters spent 134px of the box on whitespace around a
+     two-character word, which cost the cards enough width to wrap every
+     address onto a second line. 36px still reads as a clear separation. */
+  gap: 0 36px;
   min-height: 291px;
 }
+
+/* Condensed once parked.
+ *
+ * At full size the box is 356px, which is most of a laptop's viewport to give
+ * up permanently. Stuck, it keeps only what identifies each listing -- the
+ * address and its score -- and drops the bars, the summary and the rent, all
+ * of which are still a scroll away in their proper place. The slots stay
+ * slots, so they are still drop targets while condensed, which is the point.
+ */
+.slots.stuck {
+  min-height: 0;
+  padding: 12px;
+  box-shadow: var(--panel-shadow);
+  /* Without this it stays stretched to its grid row, and that row is 291px
+     because the Add a listing panel beside it says so -- so the "condensed"
+     box would shrink its contents and keep every pixel of its height. */
+  align-self: start;
+}
+.slots.stuck .slot { min-height: 0; padding: 14px 18px; }
+.slots.stuck .slot:not(.filled) { gap: 8px; font-size: 15px; }
+.slots.stuck .slot > img { width: 24px; height: 24px; }
+/* Node 2178:7575 keeps the address, its line, the rent and the ring at full
+   size, and drops only the bars -- the one part that needs room to be read.
+   Recessed like the Saved page's active card, for the same reason: it is a
+   summary of something you are already looking at. */
+.slots.stuck .pillars { display: none; }
+.slots.stuck .slot.filled { background: #fbfbfb; border-color: var(--hairline); box-shadow: none; }
+.slots.stuck .slot-clear { top: 8px; right: 10px; }
+.slots.stuck .recompare { height: 34px; margin-top: 10px; font-size: 13px; }
+
+/* Figma node 2114:851: a full-width pill across the foot of the compare box,
+   white, 45px tall at the pill radius. It spans both columns because it is
+   about the pair rather than either slot.
+ *
+ * The design draws it white on a grey backdrop. In the accent it needs no help
+ * separating from the box, and it reads as the primary action it is -- the same
+ * salmon .btn and .saved-add already use for theirs. */
+.recompare {
+  grid-column: 1 / -1;
+  /* One slot wide, centred under the "vs".
+   *
+   * The design's box is 370px and its button 354px, so full-width was right
+   * there. This box is 839px, and stretching the same button across it gave
+   * 799px of accent to carry a 117-character-wide label -- the proportion
+   * survived the scale-up, the proportions did not. At a slot's width it lines
+   * up with the columns above it and reads as one action about the pair. */
+  justify-self: center;
+  margin-top: 19px; width: min(354px, 100%); height: 45px;
+  background: var(--accent); border: 0; border-radius: var(--pill);
+  font-family: inherit; font-size: 15px; color: var(--ink);
+  cursor: pointer;
+}
+.recompare:hover:not(:disabled) { background: var(--accent-press); }
+.recompare:disabled { opacity: .45; cursor: not-allowed; }
 .vs { align-self: center; font-size: 20px; font-weight: 700; color: var(--ink-50); }
 
 .slot {
   border: 1px dashed var(--dashed);
   border-radius: var(--radius-sm);
-  display: grid; place-items: center; align-content: center; gap: 12px;
   color: var(--ink-50); font-size: 20px;
   min-height: 252px; padding: 1rem;
 }
-.slot img { width: 46px; height: 46px; opacity: .5; }
+/* Centring the mark over its label is the EMPTY slot's job, so it is scoped to
+   the empty slot. It used to sit on .slot, with `display: block` on .filled
+   meant to undo it -- but the leftover `place-items: center` went on centring a
+   filled card's contents and sizing them shrink-to-fit, which is what pulled
+   the score pill and the cross into the middle instead of the two corners, and
+   what had collapsed the bars to nothing. */
+.slot:not(.filled) {
+  display: grid; place-items: center; align-content: center; gap: 12px;
+}
+/* The empty slot's own mark -- a direct child, unlike the avatar inside a
+   filled slot's head. */
+.slot > img { width: 46px; height: 46px; opacity: .5; }
 .slot.over { border-color: var(--accent); background: rgba(232, 168, 160, .12); }
 
 .slot.filled {
-  border-style: solid; border-color: transparent;
+  position: relative;
+  border-style: solid; border-color: var(--hairline);
   background: var(--card); box-shadow: var(--card-shadow);
-  display: block; padding: 18px 20px;
+  padding: 18px 20px;
   color: var(--ink); font-size: 16px;
 }
-.slot-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
-.slot-addr { font-weight: 500; font-size: 16px; }
-.slot-total { font-size: 40px; font-weight: 700; line-height: 1; }
-.slot-total.good { color: var(--good); }
-.slot-total.moderate { color: var(--moderate); }
-.slot-total.poor { color: var(--poor); }
-.slot-summary { font-size: 12px; color: var(--ink-50); margin: .4rem 0 1rem; }
-.slot .drop { background: none; border: 0; cursor: pointer; color: var(--ink-30); font-size: 12px; padding: 0; }
-.slot .drop:hover { color: var(--ink); }
+/* Figma node 2176:7546. The address, its verdict line and the rent sit left;
+ * the score is the ring the Saved list already uses; the bars run underneath.
+ *
+ * The design's own greens and reds (#51c551, #ff1f13) are not carried over --
+ * good / moderate / poor already have colours every card, chip and map legend
+ * in this app agrees on, and a second vocabulary for the same three states
+ * would be one too many. Its 1px rgba(0,0,0,0.15) border becomes --hairline
+ * for the same reason. */
+/* The right padding is the clear control's lane, so the ring steps aside for
+   it rather than sitting underneath. */
+.slot-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding-right: 18px; }
+.slot-id { flex: 1; min-width: 0; }
+.slot-addr { font-size: 16px; font-weight: 500; color: var(--ink); }
+.slot-summary { font-size: 12px; font-weight: 500; color: var(--ink-50); margin: 5px 0 0; max-width: 218px; }
+.slot-rent { font-size: 12px; font-weight: 400; color: var(--ink-50); margin: 8px 0 0; }
+.slot-rent b { font-weight: 400; color: var(--ink); }
+
+/* Removing a listing is a thing people come to the card to do, so the control
+   is always on it rather than waiting for a hover that never happens on a
+   touch screen -- quiet at 40%, full strength on hover or focus.
+   Top-right is where a dismiss belongs; .slot-head carries the matching right
+   padding so the score ring steps aside for it rather than sitting underneath. */
+.slot-clear {
+  position: absolute; right: 14px; top: 12px;
+  display: grid; place-items: center;
+  width: 20px; height: 20px; padding: 0;
+  background: none; border: 0; cursor: pointer; opacity: .4;
+}
+.slot-clear img { width: 12px; height: 12px; display: block; }
+.slot-clear:hover, .slot-clear:focus-visible { opacity: 1; }
 
 /* ---------- pillar rows inside a filled slot ---------- */
-.pillars { display: grid; gap: .7rem; }
-.pillar-row { display: grid; grid-template-columns: 72px 1fr auto; gap: .6rem; align-items: center; }
+/* Four single-line rows. The gap can be generous now that nothing hangs below
+   a row -- the space between bars is what lets the eye run down one card and
+   across to the other, which is the only thing this card is for.
+ *
+ * `width: 100%` and the `minmax(0, 1fr)` are load-bearing, not belt-and-braces.
+ * A track is an empty div, so its max-content width is zero; any context that
+ * sizes this block shrink-to-fit therefore resolves the 1fr to nothing and the
+ * bars disappear entirely. That was masked for as long as a headline spanned
+ * columns 2/-1 underneath each row and lent the column its own width -- take
+ * the headline away and every bar vanishes. Pinning the width here means the
+ * bars no longer depend on some other element's text to exist. */
+.pillars { display: grid; gap: 1rem; width: 100%; margin-top: 20px; }
+.pillar-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; gap: .6rem; align-items: center; }
 .pillar-row .name { font-size: 12px; color: var(--ink-50); text-transform: capitalize; }
-.pillar-row .track { height: 5px; border-radius: 999px; background: rgba(0, 0, 0, .08); overflow: hidden; }
+/* 8px at a 22px radius, per the design. Its track is white on a grey card;
+   this card is white, so the track keeps the faint black it already used. */
+.pillar-row .track { height: 8px; border-radius: 22px; background: rgba(0, 0, 0, .08); overflow: hidden; }
 .pillar-row .track i { display: block; height: 100%; border-radius: 999px; }
 .pillar-row.good .track i { background: var(--good); }
 .pillar-row.moderate .track i { background: var(--moderate); }
 .pillar-row.poor .track i { background: var(--poor); }
-.pillar-row .val { font-size: 12px; font-weight: 700; min-width: 1.6rem; text-align: right; }
-.pillar-row .headline { grid-column: 2 / -1; font-size: 12px; color: var(--ink-50); margin: -.35rem 0 0; }
-.pillar-row.out .name, .pillar-row.out .headline { color: var(--ink-30); }
+.pillar-row .val { font-size: 12px; font-weight: 500; color: var(--ink-50); min-width: 1.4rem; text-align: right; font-variant-numeric: tabular-nums; }
+.pillar-row.out .name, .pillar-row.out .val { color: var(--ink-30); }
 
 /* ---------- sidebar ---------- */
 .sidebar {
@@ -178,6 +294,13 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   box-shadow: var(--card-shadow);
   padding: 19px 34px 20px;
   min-height: 291px;
+  /* Centred vertically only: the panel is as tall as the comparison box beside
+     it, which left the form hugging the top with a stretch of nothing under
+     it. The text stays left-justified -- a heading and a form label read from
+     the left edge, and the fields below them start there too. */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .sidebar h3 { margin-bottom: 7px; }
 
@@ -208,8 +331,22 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .form-error { color: var(--poor); font-size: 12px; margin: 0 0 .75rem; }
 
 /* ---------- sections + carousels ---------- */
-.section-head { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 24px; }
-.section-head .sub { color: var(--ink-50); font-size: 16px; margin: 2px 0 0; }
+/* A two-column grid rather than a flex row. The heading and the arrows share
+   row one; the subtitle spans the full width beneath them, so a long workplace
+   address wraps at the column's own edge instead of being squeezed into the
+   space beside the arrows. `align-items: start` plus the nav's own 2px keeps
+   the arrows exactly where the flex version put them. */
+.section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 1rem;
+  margin-bottom: 24px;
+}
+.section-head .sub {
+  grid-column: 1 / -1;
+  color: var(--ink-50); font-size: 16px; margin: var(--sub-gap) 0 0;
+}
 .carousel-nav { margin-left: auto; display: flex; gap: 6px; padding-top: 2px; }
 .carousel-nav button {
   position: relative;
@@ -236,7 +373,12 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   width: 264px; min-height: 110px;
   background: var(--card); border-radius: var(--radius); box-shadow: var(--card-shadow);
   padding: 16px 18px; text-align: left; border: 0; font-family: inherit;
-  cursor: grab; display: block;
+  cursor: grab;
+  /* Centred, because a rail stretches every card to the tallest one and a
+     wrapped address makes that taller than the rest. Top-aligned, the extra
+     22px all landed under the shorter cards and read as a stray gap; split in
+     two it reads as breathing room. */
+  display: flex; flex-direction: column; justify-content: center;
 }
 .spot:hover { box-shadow: var(--panel-shadow); }
 .spot:active { cursor: grabbing; }
@@ -399,6 +541,23 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
  * with a 111px body, and the amenities card grows to hold its list.
  */
 .rc { max-width: 956px; margin: 0 auto; }
+/* Embedded in another screen's column: it fills what it is given rather than
+   holding itself to the reading measure a full page wants. */
+.rc-inline { max-width: none; margin: 0; }
+/* Title, heart and score on one line, on the full page and embedded alike.
+ *
+ * The h1 reset needs `.rc` in front of it: `.rc h1` sets a 22px bottom margin
+ * and matches at the same specificity, so a bare `.rc-head-row h1` lost on
+ * source order and left the margin in place -- which made the flex line 22px
+ * taller than the heading and dropped the heart and the score 11px below it. */
+/* The same 4px the headings elsewhere keep above their subtitles. On Saved it
+   is what puts this column's address line level with the list's "Ranked by..."
+   line, which the design has sharing a baseline. */
+.rc-head-row { display: flex; align-items: center; gap: 18px; margin-bottom: var(--sub-gap); }
+.rc .rc-head-row h1 { margin: 0; }
+.rc-head-row .spacer { flex: 1; }
+/* The score is this row's trailing item, not a tail on the meta line. */
+.rc-head-row .rc-score { margin-left: 0; }
 
 .rc-top { display: flex; align-items: center; margin-bottom: 22px; }
 .rc-top .spacer { flex: 1; }
@@ -437,7 +596,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .rc-section { margin-bottom: 34px; }
 .rc-section h2 { margin-bottom: 22px; }
 .rc-section h3 { margin: 0; }
-.rc-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: 1px 0 7px; }
+.rc-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 7px; }
 
 .rc-card {
   position: relative;
@@ -457,9 +616,11 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   background: #eee;
   font-size: 12px; color: var(--ink-50);
 }
-.rc-chip.good { background: #d8f8d8; }
-.rc-chip.moderate { background: #f8fac4; }
-.rc-chip.poor { background: #fadcd8; }
+/* One home for the three band backgrounds, now that the slot card wears them
+   as well as the reality check's chips. */
+.rc-chip.good, .slot-chip.good { background: #d8f8d8; }
+.rc-chip.moderate, .slot-chip.moderate { background: #f8fac4; }
+.rc-chip.poor, .slot-chip.poor { background: #fadcd8; }
 
 .rc-headline { font-size: 16px; font-weight: 600; margin: 14px 0 0; padding-right: 120px; }
 .rc-detail { font-size: 16px; font-weight: 500; color: var(--ink-50); margin: 5px 0 0; padding-right: 120px; }
@@ -513,37 +674,114 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .navlink.on { border-bottom-color: var(--ink); }
 
 /* ---------- saved tab ----------
- * No design node for this screen; the pill-bar node 2169:7396 is the map
- * callout, not this. Cards keep the two visually distinct.
+ * Figma node 2130:4433. A ranked column of listings beside the board's own
+ * map. The design's list is 404px against a 710px map with a 32px gutter.
  */
-.saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 20px; }
+/* Node 2135:5355, measured on its 1440 frame: the list runs 102->506 and the
+   right column 608->1340, so the gutter is 102px and the cards stack 30px
+   apart (card tops 221, 387, 553, 719, each 136 tall). */
+.saved { display: grid; grid-template-columns: 404px minmax(0, 1fr); gap: 102px; align-items: start; }
+/* Spacing by margin rather than a grid gap: the gap would apply between the
+   heading block and the first card as well as between cards, and those are
+   two different distances. */
+.saved-list { display: grid; align-content: start; }
+.saved-head { margin-bottom: 12px; }
+.saved-list h1 { margin-bottom: 0; }
+.saved-card + .saved-card { margin-top: 30px; }
+.saved-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 0; }
+.saved-map h2 { margin-bottom: 18px; }
+
+/* 404x136 in the design: the pick circle, the text, and the score ring. */
 .saved-card {
   position: relative;
+  display: grid; grid-template-columns: 23px 1fr auto;
+  align-items: center; gap: 0 17px;
+  min-height: 136px; padding: 15px 20px 15px 14px;
   background: var(--card); border-radius: var(--radius); box-shadow: var(--card-shadow);
+  /* Transparent by default so the open card's border does not resize it. */
+  border: 1px solid transparent;
 }
+
+/* Shaped like a radio because it behaves like one -- it holds this listing in
+   a comparison slot. Filled with the accent when it does. */
+.saved-pick {
+  width: 23px; height: 23px; padding: 0;
+  border: 1px solid var(--hairline); border-radius: 50%;
+  background: none; cursor: pointer;
+}
+.saved-pick:hover:not(:disabled) { border-color: var(--accent-press); }
+.saved-pick.on { background: var(--accent); border-color: var(--accent); }
+.saved-pick:disabled { opacity: .4; cursor: not-allowed; }
+
 .saved-open {
-  display: grid; gap: 6px; width: 100%;
-  background: none; border: 0; cursor: pointer; text-align: left;
-  font-family: inherit; padding: 18px 20px 8px;
+  display: grid; gap: 3px; justify-items: start; text-align: left;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: inherit; min-width: 0;
 }
-.saved-addr { font-size: 16px; font-weight: 500; color: var(--ink); padding-right: 34px; }
-.saved-meta, .saved-line { font-size: 12px; font-weight: 500; color: var(--ink-50); }
-.saved-open .rc-score { margin: 8px 0 0; justify-self: start; }
-.saved-actions { display: flex; gap: 8px; padding: 0 20px 18px; }
-.saved-add {
-  height: 34px; padding: 0 16px;
-  background: var(--accent); border: 0; border-radius: var(--pill);
-  font-family: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+.saved-rank {
+  font-size: 12px; font-weight: 400; color: var(--ink-50);
+  min-height: 25px; display: inline-grid; align-items: center;
 }
-.saved-add:hover:not(:disabled) { background: var(--accent-press); }
-.saved-add:disabled { opacity: .5; cursor: not-allowed; }
+/* Only the leader gets the pill; the rest are a bare "#2". */
+.saved-rank.best {
+  padding: 0 14px; border-radius: 24px;
+  background: #d8f8d8; color: var(--ink-60);
+}
+.saved-addr { font-size: 16px; font-weight: 400; color: var(--ink); }
+.saved-line {
+  font-size: 12px; font-weight: 400; color: var(--ink-50);
+  max-width: 244px;
+}
+.saved-rent { font-size: 12px; font-weight: 400; color: var(--ink-50); margin-top: 1px; }
+.saved-rent b { font-weight: 400; color: var(--ink); }
+
+/* The ring is shared with the comparison slots -- see ScoreRing.tsx. */
+.score-ring-wrap { display: grid; justify-items: center; gap: 4px; }
+.score-ring-label { font-size: 12px; color: var(--ink-50); }
+.score-ring { position: relative; display: grid; place-items: center; width: 58px; height: 58px; }
+.score-ring svg { display: block; }
+.score-ring .ring-track { fill: none; stroke: rgba(0, 0, 0, .08); stroke-width: 4; }
+.score-ring .ring-arc { fill: none; stroke: var(--ink-30); stroke-width: 4; stroke-linecap: round; }
+.score-ring .ring-arc.good { stroke: var(--good); }
+.score-ring .ring-arc.moderate { stroke: var(--moderate); }
+.score-ring .ring-arc.poor { stroke: var(--poor); }
+.ring-pct { position: absolute; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
 .saved-heart {
-  position: absolute; top: 14px; right: 14px;
-  width: 24px; height: 24px; padding: 0;
-  background: none; border: 0; cursor: pointer;
+  position: absolute; top: 12px; right: 12px;
+  width: 20px; height: 20px; padding: 0;
+  background: none; border: 0; cursor: pointer; opacity: 0;
 }
-.saved-heart img { width: 24px; height: 24px; display: block; }
-.saved-heart:hover { opacity: .7; }
+.saved-heart img { width: 20px; height: 20px; display: block; }
+/* Hidden until the card is under the cursor, or the control has focus -- the
+   design has no remove, and this should not compete with the score. */
+.saved-card:hover .saved-heart, .saved-heart:focus-visible { opacity: .55; }
+
+/* A card the right-hand column is currently about -- either opened on its own
+   or picked into the comparison. Recessed rather than raised: it is the one
+   you are already inside, so it steps back and lets the others keep the shadow
+   that says "still clickable". */
+.saved-card.on {
+  background: #fbfbfb;
+  border-color: var(--hairline);
+  box-shadow: none;
+}
+/* Node 2135:5295 drops the pick circle from a selected card and shifts its
+   contents into that lane. The circle is back, because the design has no way
+   to *un*select and this screen needs one: with the circle gone, a chosen pair
+   could only ever be swapped, never broken up. It stays filled with the accent
+   so the card still reads as chosen, and the layout stays put so a card does
+   not jump sideways when you pick it. */
+/* With both slots taken, the listings that are not being compared fade out of
+   the way. They stay clickable -- picking one still swaps it in. */
+.saved-card.dim { opacity: .4; }
+.saved-card.dim:hover, .saved-card.dim:focus-within { opacity: 1; }
+.saved-heart:hover { opacity: 1 !important; }
+
+/* One column once the 404 + 710 of the design no longer fit side by side. */
+@media (max-width: 1100px) {
+  .saved { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- map ---------- */
 .zone {
@@ -560,18 +798,33 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   padding: 10px 12px; font-size: 12px; color: var(--poor);
 }
 
-/* Stacked at the map's top-left, matching the design's pill column. */
+/* Stacked at the map's top-left, matching the design's pill column.
+ *
+ * The surface is the icon buttons' own: #FBFBFB behind a 1px black border at
+ * 5%, the same values circle-btn.svg and circle-ring.svg paint and that
+ * .zone-expand reproduces in CSS. The filters, the expand control in the
+ * opposite corner and the carousel rings therefore read as one family of
+ * controls rather than three. Height stays 29px because box-sizing is
+ * border-box globally, so the new border draws inside the old box.
+ *
+ * The selected filter fills with the accent salmon, the same treatment .btn
+ * and .saved-add use for their active state, hairline border and all -- so an
+ * unselected pill reads as one of the map's icon buttons and the selected one
+ * reads as the app's primary colour.
+ */
 .zone-pills { position: absolute; top: 16px; left: 16px; display: grid; gap: 7px; z-index: 2; }
 .zone-pill {
   width: 77px; height: 29px;
-  border: 0; border-radius: var(--pill);
-  background: rgba(145, 145, 145, 0.31);
-  color: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--pill);
+  background: #FBFBFB;
+  color: var(--ink-30);
   font-family: Inter, Manrope, sans-serif; font-size: 12px;
   cursor: pointer;
 }
-.zone-pill.on { background: #919191; color: var(--ink); }
-.zone-pill:disabled { cursor: not-allowed; opacity: .55; }
+.zone-pill:hover { background: #ffffff; }
+.zone-pill.on { background: var(--accent); color: var(--ink); }
+.zone-pill.on:hover { background: var(--accent-press); }
 
 /* The ring was an exported SVG filled #D9D9D9 -- the only circle in the set
    that was not #FBFBFB, and not recolourable from CSS. Drawn here instead so
@@ -731,10 +984,9 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .picked-add:hover:not(:disabled) { background: var(--accent-press); }
 .picked-add:disabled { opacity: .55; cursor: not-allowed; }
 
-/* A card action that sits below the card's own text. */
+/* The whole card is the control now, so there is no button to leave room for
+   and nothing to sit below the text. `position` stays for the drag handle. */
 .spot { position: relative; }
-.spot-check { position: absolute; right: 14px; bottom: 12px; margin: 0; }
-.spot .metric { padding-right: 64px; }
 
 .linky {
   background: none; border: 0; padding: 0; cursor: pointer;
@@ -752,6 +1004,10 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 
 /* ---------- filling in a missing rent ---------- */
 .rent-prompt { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+/* Narrower inside a two-up comparison card than on the full-width reality
+   check, and the button says "Score" rather than "Check cost" for the room. */
+.cmp-card .rent-prompt { margin-top: 12px; }
+.cmp-card .rent-go { padding: 0 14px; }
 .rent-field {
   display: flex; align-items: center; gap: 8px;
   height: 45px; padding: 0 14px; width: 260px; max-width: 100%;
@@ -783,7 +1039,16 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 }
 .rc-chev:hover { opacity: 1; }
 .rc-chev img { width: 21px; height: 21px; display: block; transition: transform .18s; }
-.rc-card.open .rc-chev img { transform: rotate(180deg); }
+/* chevron.svg points down, so an open panel turns it up: the arrow shows what
+   the next click does, not what already happened.
+ *
+ * Keyed on the button's own aria-expanded rather than on a parent's .open
+ * class. The rule used to read `.rc-card.open`, which meant the comparison
+   page's chevrons -- the same control, inside a .cmp-card -- never turned at
+   all. Every one of these buttons has to carry aria-expanded to be correct
+   anyway, so hanging the arrow off it keeps the two from disagreeing and picks
+   up any dropdown added later. */
+.rc-chev[aria-expanded="true"] img { transform: rotate(180deg); }
 
 .rc-modes { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--sunken); }
 .rc-mode {
@@ -803,6 +1068,44 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   color: var(--ink-50); margin: 0 0 6px;
 }
 
+/* One row per incident group in the safety card. The bar column is fixed so
+   every bar starts at the same x and the shares stay comparable down the
+   list; counts and shares are tabular so their digits line up too. */
+.rc-incident {
+  display: grid;
+  grid-template-columns: 1fr 120px 44px 40px;
+  align-items: center; gap: 12px;
+  padding: 8px 0;
+  font-size: 16px;
+}
+.rc-incident + .rc-incident { border-top: 1px solid rgba(0, 0, 0, .04); }
+.rc-incident .i-label { color: var(--ink); }
+.rc-incident .i-bar { height: 5px; border-radius: 999px; background: rgba(0, 0, 0, .08); overflow: hidden; }
+.rc-incident .i-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.rc-incident .i-count { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.rc-incident .i-share { color: var(--ink-50); font-variant-numeric: tabular-nums; text-align: right; }
+/* A label/number pair, for panels that lay out the figures behind a score
+   rather than a list of things. Same rhythm as .rc-mode, one column fewer. */
+.rc-fact {
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: center; gap: 12px;
+  padding: 8px 0;
+  font-size: 16px;
+}
+.rc-fact + .rc-fact { border-top: 1px solid rgba(0, 0, 0, .04); }
+.rc-fact .f-label { color: var(--ink-50); }
+.rc-fact .f-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.rc-incident-note { font-size: 12px; color: var(--ink-50); margin: 12px 0 0; }
+.rc-incident-note code { font-size: 11px; }
+
+@media (max-width: 560px) {
+  /* The bar is the first thing worth dropping: the share column already says
+     what it says, and the label needs the room more. */
+  .rc-incident { grid-template-columns: 1fr 44px 40px; }
+  .rc-incident .i-bar { display: none; }
+}
+
 /* ---------- map filling its column ----------
  * The right column already stretches to the left one; the map inside it was
  * pinned to 337px, so it stopped short. This lets the section, and the map in
@@ -813,3 +1116,111 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .col.fill > section > .section-head { flex: none; }
 .zone.fill { flex: 1; min-height: 240px; }
 .col.fill > section > .empty.map { flex: 1; min-height: 240px; }
+
+/* ---------- comparison of two listings ----------
+ * Figma node 2136:6930. One column of pillars, each a two-up row, with the
+ * better side tinted. The design uses rgba(58,219,58,0.2) for the pillar cards
+ * and the flat #d8f8d8 of the Good chip for amenities; both are named here so
+ * "the winning green" is one decision rather than two literals.
+ */
+:root {
+  --won: rgba(58, 219, 58, 0.2);
+  --won-flat: #d8f8d8;
+}
+
+.cmp .cmp-verdict { font-size: 24px; font-weight: 700; margin: 0 0 8px; }
+.cmp .cmp-summary { font-size: 16px; font-weight: 400; color: var(--ink); margin: 0 0 28px; max-width: 931px; }
+
+/* Two equal columns at every size the design covers, collapsing to a stack
+   only when a 450px card would no longer fit beside its pair. */
+.cmp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+
+.cmp-heads { margin-bottom: 34px; }
+.cmp-head {
+  position: relative;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 40px; padding: 8px 40px;
+  background: var(--card); border: 0; border-radius: var(--radius-sm);
+  box-shadow: var(--card-shadow);
+  font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink);
+  cursor: pointer;
+}
+.cmp-head:hover { box-shadow: var(--panel-shadow); }
+.cmp-head .cmp-addr { text-align: center; }
+.cmp-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cmp-score.good { color: var(--good); }
+.cmp-score.moderate { color: var(--moderate); }
+.cmp-score.poor { color: var(--poor); }
+
+/* The tick sits inside the card's own padding rather than beside it, so the
+   two columns stay exactly the same width whichever one wins. */
+.cmp-tick { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 17px; height: 13px; }
+
+.cmp-section { margin-bottom: 34px; }
+.cmp-section h3 { margin-bottom: 0; }
+.cmp-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 16px; }
+
+.cmp-card {
+  position: relative;
+  min-height: 93px;
+  padding: 18px 25px 18px 47px;
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+}
+/* The winning card is a tint, not a card: the design drops the shadow so the
+   colour alone carries it and the two sides do not fight for depth. */
+.cmp-card.won { background: var(--won); box-shadow: none; }
+/* Amenities is the one row the design tints with the flat Good-chip green
+   rather than the translucent one -- its card is tall enough that the
+   see-through tint went muddy over the page. */
+.cmp-amenities .cmp-card.won { background: var(--won-flat); }
+.cmp-card.out { opacity: .7; }
+.cmp-card .cmp-tick { left: 20px; top: 30px; transform: none; }
+.cmp-headline { font-size: 16px; font-weight: 600; margin: 0; padding-right: 34px; }
+.cmp-detail { font-size: 16px; font-weight: 500; color: var(--ink-50); margin: 5px 0 0; padding-right: 34px; }
+.cmp-card .rc-chev { top: 18px; right: 18px; }
+
+.cmp-open { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, .06); }
+.cmp-card.won .cmp-open { border-top-color: rgba(0, 0, 0, .1); }
+
+/* Amenity rows carry a note under the name, so the name and distance share a
+   line and the note spans beneath both. */
+.cmp-item { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 7px 0; font-size: 16px; }
+.cmp-item + .cmp-item { border-top: 1px solid rgba(0, 0, 0, .04); }
+.cmp-item .i-name { color: var(--ink); }
+.cmp-item .i-miles { color: var(--ink-50); font-variant-numeric: tabular-nums; }
+.cmp-item .i-note { grid-column: 1 / -1; font-size: 12px; color: var(--ink-50); }
+
+/* The shared panels from PillarDetail bring the reality check's own spacing --
+   .rc-modes opens with a rule and 18px of air. Inside a comparison card the
+   .cmp-open wrapper has already drawn that line, so the inner copy is stripped
+   rather than the two stacking up. */
+.cmp-open .rc-modes { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* A comparison card is half the width of a reality-check card, and the bar
+   column is a fixed 120px of it. Dropping the bar gives the labels the room
+   back; the share beside them was already saying the same thing. */
+.cmp-open .rc-incident { grid-template-columns: 1fr 44px 40px; }
+.cmp-open .rc-incident .i-bar { display: none; }
+
+/* Below this the two 450px columns of the design cannot both fit, so the
+   comparison becomes one column and the tint does the pairing instead. */
+@media (max-width: 900px) {
+  .cmp-row { grid-template-columns: 1fr; gap: 14px; }
+  .cmp-heads { gap: 10px; }
+}
+
+/* ---------- crash screen ----------
+ * Shown by ErrorBoundary in place of the blank page a thrown render leaves.
+ */
+.crash { max-width: 760px; margin: 0 auto; padding: 60px 24px; }
+.crash h1 { font-size: 28px; margin: 0 0 10px; }
+.crash-msg { font-size: 16px; color: var(--poor); margin: 0 0 20px; }
+.crash details { margin-bottom: 24px; }
+.crash summary { cursor: pointer; font-size: 14px; color: var(--ink-50); }
+.crash pre {
+  margin-top: 12px; padding: 14px;
+  background: var(--sunken); border-radius: var(--radius-sm);
+  font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap;
+}
+.crash-actions { display: flex; gap: 12px; flex-wrap: wrap; }

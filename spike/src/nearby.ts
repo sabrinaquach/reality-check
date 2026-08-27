@@ -91,5 +91,6 @@ export async function quietNearby(at: LatLng, radiusMiles = 4, limit = 5): Promi
     if (picked.some((p) => milesBetween(p, s) < SPREAD_MILES)) continue;
     picked.push(s);
   }
+
   return picked;
 }

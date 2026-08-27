@@ -1,5 +1,5 @@
 import { bandFor } from "../bands.ts";
-import type { LatLng, Pillar } from "../types.ts";
+import type { CostFacts, LatLng, Pillar } from "../types.ts";
 
 const GEOGRAPHIES = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates";
 /** ACS 5-year releases land ~11 months after the year ends; try newest first. */
@@ -105,34 +105,61 @@ export async function scoreCost(at: LatLng, rent?: number): Promise<Pillar> {
     };
   }
 
-  const where = median.level === "tract" ? tract.name : "the county";
-  const basis = `Census ACS ${median.year} 5-year median rent for ${where}`;
+  /**
+   * "Census Tract 5009.01" is what the Census calls this place; it is not what
+   * anyone else calls it, and it means nothing to someone deciding where to
+   * live. The cards say "around here" and keep the tract id for the panel that
+   * explains where the figure came from.
+   */
+  const where = median.level === "tract" ? "around here" : "in this county";
+  const basis = `Typical rents from the Census ACS ${median.year} five-year estimate`;
+  const facts: CostFacts = {
+    rent,
+    median: median.rent,
+    year: median.year,
+    level: median.level,
+    area: median.level === "tract" ? tract.name : `${tract.name} county`,
+  };
+  const typical = `$${median.rent.toLocaleString()}/mo`;
 
   if (!rent) {
     return {
       ...base,
       basis,
+      cost: facts,
       unavailable: "No listed rent given.",
-      headline: `Median $${median.rent.toLocaleString()}/mo`,
-      detail: `Typical rent around here. Enter the listing's rent to score it.`,
+      headline: `Homes ${where} rent for about ${typical}`,
+      detail: "Add this listing's rent and we'll score it against that.",
     };
   }
 
   const ratio = rent / median.rent;
   const score = costScore(ratio);
   const band = bandFor(score);
+  const diff = rent - median.rent;
   const pct = Math.round((ratio - 1) * 100);
+
+  /**
+   * Dollars lead, not percentages.
+   *
+   * "12% above the local median" asks the reader to do arithmetic before they
+   * know whether to care; "$195 more than typical" is the same fact already
+   * converted into the units rent is actually paid in.
+   */
   const comparison =
     Math.abs(pct) <= 5
-      ? "about the local median"
-      : `${Math.abs(pct)}% ${pct > 0 ? "above" : "below"} the local median`;
+      ? `about typical ${where}`
+      : `$${Math.abs(diff).toLocaleString()} ${diff > 0 ? "more" : "less"} than typical`;
 
   return {
     ...base,
     basis,
+    cost: facts,
     score,
     band,
     headline: `$${rent.toLocaleString()}/mo — ${comparison}`,
-    detail: `Median rent in ${where} is $${median.rent.toLocaleString()}. Existing leases pull that number below today's asking rents.`,
+    detail:
+      `Homes ${where} rent for about ${typical}. That counts leases signed years ago, ` +
+      `so today's listings usually ask more.`,
   };
 }

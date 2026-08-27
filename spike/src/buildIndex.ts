@@ -9,9 +9,10 @@
  * blocks per year, which is cheap to do once and useless to redo per request.
  *
  *   npm run build-index -- --year 2026 --limit 4000
+ *   npm run build-index -- --breakdown   # incident groups only, no geocoding
  */
 import { readFile, writeFile } from "node:fs/promises";
-import { classify, WEIGHTS, type Block, type BlockIndex } from "./sources/safety.ts";
+import { classify, groupOf, GROUPS, WEIGHTS, type Block, type BlockIndex } from "./sources/safety.ts";
 import { milesBetween } from "./geocode.ts";
 
 const CKAN = "https://data.sanjoseca.gov/api/3/action";
@@ -96,6 +97,64 @@ async function batchGeocode(addresses: string[]): Promise<Map<string, { lat: num
 }
 
 /**
+ * Per-block counts of each renter-facing incident group.
+ *
+ * Grouping happens in SQL rather than here so the response stays small: 188
+ * call types collapse to 14 labels before the rows are sent. The result is
+ * still ~26k rows, comfortably inside CKAN's cap for the 2026 data but not by
+ * enough to rely on, so it is paged.
+ */
+async function fetchBreakdown(resource: string): Promise<Map<string, Map<string, number>>> {
+  const buckets = new Map<string, string[]>();
+  const types = await sql(`SELECT DISTINCT "CALL_TYPE" FROM "${resource}"`);
+  for (const { CALL_TYPE } of types) {
+    const g = groupOf(CALL_TYPE);
+    if (!g) continue;
+    if (!buckets.has(g)) buckets.set(g, []);
+    buckets.get(g)!.push(CALL_TYPE);
+  }
+
+  const caseSql = [...buckets]
+    .map(([g, ts]) => `WHEN "CALL_TYPE" IN (${ts.map(quote).join(",")}) THEN ${quote(g)}`)
+    .join(" ");
+  const kept = [...buckets.values()].flat().map(quote).join(",");
+
+  const out = new Map<string, Map<string, number>>();
+  const PAGE = 20_000;
+  for (let offset = 0; ; offset += PAGE) {
+    const rows = await sql(`
+      SELECT "ADDRESS", CASE ${caseSql} END AS grp, COUNT(*) AS n
+      FROM "${resource}"
+      WHERE "CALL_TYPE" IN (${kept})
+        AND "FINAL_DISPO" NOT IN (${DEAD_DISPOS.map(quote).join(",")})
+      GROUP BY "ADDRESS", grp
+      ORDER BY "ADDRESS", grp
+      LIMIT ${PAGE} OFFSET ${offset}
+    `);
+    for (const r of rows) {
+      const addr = normalizeBlock(r.ADDRESS);
+      if (!addr || !r.grp) continue;
+      if (!out.has(addr)) out.set(addr, new Map());
+      const m = out.get(addr)!;
+      m.set(r.grp, (m.get(r.grp) ?? 0) + Number(r.n));
+    }
+    process.stdout.write(`  ${offset + rows.length} rows... `);
+    if (rows.length < PAGE) break;
+  }
+  console.log("done");
+  return out;
+}
+
+/** Group counts for one block, as the compact [index, count] pairs Block.g holds. */
+function packGroups(counts: Map<string, number> | undefined, labels: string[]): [number, number][] {
+  if (!counts) return [];
+  return [...counts]
+    .map(([label, n]) => [labels.indexOf(label), n] as [number, number])
+    .filter(([i]) => i >= 0)
+    .sort((a, b) => b[1] - a[1]);
+}
+
+/**
  * Sample real blocks to learn what a "normal" neighbourhood total looks like,
  * and how heavy the worst one gets.
  *
@@ -137,8 +196,36 @@ async function rebaseline() {
   console.log(`   tailMax: ${tailMax}\n`);
 }
 
+/**
+ * Add (or refresh) the per-block incident breakdown on an index already on
+ * disk. Joins on address, so it costs one CKAN query and no geocoding -- the
+ * expensive half of a full build is exactly what this exists to skip.
+ */
+async function addBreakdown() {
+  const index = JSON.parse(await readFile(INDEX_PATH, "utf8")) as BlockIndex;
+  const resource = RESOURCES[index.year];
+  if (!resource) throw new Error(`No resource id for ${index.year}. Known: ${Object.keys(RESOURCES)}`);
+
+  console.log(`\nAdding incident breakdown to ${index.blocks.length} blocks from ${index.year}...`);
+  const breakdown = await fetchBreakdown(resource);
+  const labels = GROUPS.map((g) => g.label);
+
+  let matched = 0;
+  const blocks = index.blocks.map((b) => {
+    const g = packGroups(breakdown.get(b.address), labels);
+    if (g.length) matched++;
+    return g.length ? { ...b, g } : b;
+  });
+
+  const next: BlockIndex = { ...index, builtAt: new Date().toISOString(), groupLabels: labels, blocks };
+  await writeFile(INDEX_PATH, JSON.stringify(next));
+  console.log(`   ${matched} of ${blocks.length} blocks matched a breakdown`);
+  console.log(`   groups: ${labels.join(", ")}\n`);
+}
+
 async function main() {
   if (process.argv.includes("--rebaseline")) return rebaseline();
+  if (process.argv.includes("--breakdown")) return addBreakdown();
   const year = Number(arg("year", "2026"));
   const limit = Number(arg("limit", "4000"));
   const resource = RESOURCES[year];
@@ -189,15 +276,22 @@ async function main() {
   const ranked = [...byAddress.entries()]
     .sort((a, b) => b[1].weight - a[1].weight)
     .slice(0, limit);
-  console.log(`3. Geocoding ${ranked.length} blocks (of ${byAddress.size} total)...`);
+  console.log("3. Counting incident groups per block...");
+  const breakdown = await fetchBreakdown(resource);
+  const labels = GROUPS.map((g) => g.label);
+
+  console.log(`4. Geocoding ${ranked.length} blocks (of ${byAddress.size} total)...`);
   const coords = await batchGeocode(ranked.map(([a]) => a));
 
   const blocks: Block[] = ranked
     .filter(([a]) => coords.has(a))
-    .map(([address, v]) => ({ address, ...coords.get(address)!, ...v }));
+    .map(([address, v]) => {
+      const g = packGroups(breakdown.get(address), labels);
+      return { address, ...coords.get(address)!, ...v, ...(g.length ? { g } : {}) };
+    });
   console.log(`   ${blocks.length} geocoded (${Math.round((blocks.length / ranked.length) * 100)}%).\n`);
 
-  console.log("4. Computing city baseline...");
+  console.log("5. Computing city baseline...");
   const { deciles, tailMax, sampled } = baseline(blocks);
   const index: BlockIndex = {
     builtAt: new Date().toISOString(),
@@ -205,6 +299,7 @@ async function main() {
     radiusMiles: RADIUS_MILES,
     baselineDeciles: deciles,
     tailMax,
+    groupLabels: labels,
     blocks,
   };
   await writeFile(INDEX_PATH, JSON.stringify(index));

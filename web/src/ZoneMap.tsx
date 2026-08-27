@@ -6,7 +6,7 @@ import type { Route } from "./types.ts";
 
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
-type Layer = "commute" | "safety" | "cost";
+type Layer = "commute" | "safety";
 
 type Block = {
   address: string;
@@ -94,6 +94,29 @@ function decodePolyline(encoded: string): [number, number][] {
   return points;
 }
 
+/**
+ * Mapbox throws "Style is not done loading" from addSource/addLayer until the
+ * style has actually finished, and its "styledata" event fires well before
+ * that. Anything that adds to the map goes through here, so an early arrival
+ * waits for the next idle instead of throwing.
+ *
+ * This is not tidiness. An uncaught throw inside an effect unmounts the whole
+ * React tree, so a mistimed overlay took the entire page down with it -- which
+ * is exactly what happened when the map was swapped out from under itself by
+ * picking a second listing to compare.
+ */
+function whenStyleReady(m: mapboxgl.Map, add: () => void) {
+  const run = () => {
+    try {
+      add();
+    } catch {
+      // The map is still usable without this overlay; a blank page is not.
+    }
+  };
+  if (m.isStyleLoaded()) run();
+  else m.once("idle", run);
+}
+
 export type MapListing = {
   address: string;
   lat: number;
@@ -157,6 +180,16 @@ export function ZoneMap({
 
   useEffect(() => {
     if (!TOKEN || !center || !host.current || map.current) return;
+    /**
+     * A fresh map starts unready, whatever the last one managed.
+     *
+     * This effect rebuilds the map when the centre moves, but `ready` is state
+     * and survives that -- so the new map inherited the old one's `true`, and
+     * every effect waiting on it fired immediately against a style that had
+     * not loaded. addSource throws there, and an uncaught throw in an effect
+     * unmounts the page.
+     */
+    setReady(false);
     mapboxgl.accessToken = TOKEN;
     try {
       const m = new mapboxgl.Map({
@@ -172,12 +205,20 @@ export function ZoneMap({
       // software WebGL, and a slow device can leave the map blank forever with
       // no explanation. Take the first of several signals, and say something
       // if none of them arrive.
-      const markReady = () => setReady(true);
-      if (m.loaded()) markReady();
+      //
+      // But "styledata" fires while the style is still loading, and everything
+      // downstream of `ready` adds sources to the map -- which throws until it
+      // is genuinely done. So the signals only *prompt* a check, and the check
+      // is the real gate. `on` rather than `once`: an early styledata must not
+      // consume the only chance to notice.
+      const markReady = () => {
+        if (m.isStyleLoaded()) setReady(true);
+      };
+      if (m.isStyleLoaded()) setReady(true);
       else {
-        m.once("load", markReady);
-        m.once("idle", markReady);
-        m.once("styledata", markReady);
+        m.on("load", markReady);
+        m.on("idle", markReady);
+        m.on("styledata", markReady);
       }
       map.current = m;
     } catch (e) {
@@ -202,27 +243,39 @@ export function ZoneMap({
 
     new mapboxgl.Marker({ color: "#e8a8a0" }).setLngLat([center.lng, center.lat]).addTo(m);
 
+    /**
+     * The drawn commute, and the last piece that used to trust `ready` alone.
+     *
+     * `ready` is state, so resetting it when the map is rebuilt does not reach
+     * effects already queued in the same commit -- they still close over the
+     * old `true` and run against a style that has not loaded. Opening a saved
+     * listing does exactly that: the centre moves, the map is rebuilt, and
+     * this effect fires with a route to draw. Asking the map itself is the
+     * only check that cannot be stale.
+     */
     if (route && !m.getSource("route")) {
       const coords = decodePolyline(route.polyline);
-      m.addSource("route", {
-        type: "geojson",
-        data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } },
+      whenStyleReady(m, () => {
+        m.addSource("route", {
+          type: "geojson",
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } },
+        });
+        m.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#e8a8a0", "line-width": 5, "line-opacity": 0.9 },
+        });
+        m.fitBounds(
+          [
+            [route.bounds.west, route.bounds.south],
+            [route.bounds.east, route.bounds.north],
+          ],
+          { padding: 48, duration: 0 },
+        );
+        setLayersAdded((n) => n + 1);
       });
-      setLayersAdded((n) => n + 1);
-      m.addLayer({
-        id: "route-line",
-        type: "line",
-        source: "route",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#e8a8a0", "line-width": 5, "line-opacity": 0.9 },
-      });
-      m.fitBounds(
-        [
-          [route.bounds.west, route.bounds.south],
-          [route.bounds.east, route.bounds.north],
-        ],
-        { padding: 48, duration: 0 },
-      );
     }
 
     // Severity-weighted incidents, drawn as density rather than dots -- one
@@ -232,8 +285,10 @@ export function ZoneMap({
       .then((r) => r.json())
       .then((geo) => {
         if (cancelled || !map.current || map.current.getSource("blocks")) return;
-        map.current.addSource("blocks", { type: "geojson", data: geo });
-        map.current.addLayer({
+        const m2 = map.current;
+        whenStyleReady(m2, () => {
+        m2.addSource("blocks", { type: "geojson", data: geo });
+        m2.addLayer({
           id: "safety-heat",
           type: "heatmap",
           source: "blocks",
@@ -280,7 +335,7 @@ export function ZoneMap({
         });
         // A second layer over the same source: the heat shows where, this shows
         // which, once someone picks a band from the legend.
-        map.current.addLayer({
+        m2.addLayer({
           id: "blocks-points",
           type: "circle",
           source: "blocks",
@@ -298,6 +353,8 @@ export function ZoneMap({
             "circle-opacity": 0.95,
           },
         });
+        setLayersAdded((n) => n + 1);
+        });
 
         setBlocks(
           (geo.features ?? []).map((f: any) => ({
@@ -309,7 +366,6 @@ export function ZoneMap({
             lat: f.geometry.coordinates[1],
           })),
         );
-        setLayersAdded((n) => n + 1);
       })
       .catch(() => {
         /* the map still works without the overlay */
@@ -359,8 +415,10 @@ export function ZoneMap({
           if (maxX > minX) isoBounds.current[feat.properties.contour] = [[minX, minY], [maxX, maxY]];
         }
 
-        map.current.addSource("iso", { type: "geojson", data: geo });
-        map.current.addLayer(
+        const m2 = map.current;
+        whenStyleReady(m2, () => {
+        m2.addSource("iso", { type: "geojson", data: geo });
+        m2.addLayer(
           {
             id: "iso-fill",
             type: "fill",
@@ -378,7 +436,7 @@ export function ZoneMap({
           // Under the route line and the listing dots, so those stay readable.
           m.getLayer("route-line") ? "route-line" : undefined,
         );
-        map.current.addLayer({
+        m2.addLayer({
           id: "iso-line",
           type: "line",
           source: "iso",
@@ -386,6 +444,7 @@ export function ZoneMap({
           paint: { "line-color": "#dd968d", "line-width": 1, "line-opacity": 0.7 },
         });
         setLayersAdded((n) => n + 1);
+        });
       })
       .catch(() => {
         /* the commute route still draws without the rings */
@@ -425,6 +484,7 @@ export function ZoneMap({
       return;
     }
 
+    whenStyleReady(m, () => {
     m.addSource("listings", { type: "geojson", data });
     m.addLayer({
       id: "listings-halo",
@@ -466,6 +526,7 @@ export function ZoneMap({
         "text-allow-overlap": true,
       },
       paint: { "text-color": "#ffffff" },
+    });
     });
 
     m.on("click", "listings-dot", (e) => {
@@ -626,22 +687,15 @@ export function ZoneMap({
       )}
 
       <div className="zone-pills">
-        {(["commute", "safety", "cost"] as Layer[]).map((k) => {
-          const unavailable = k === "cost";
-          return (
-            <button
-              key={k}
-              className={layer === k ? "zone-pill on" : "zone-pill"}
-              disabled={unavailable}
-              title={
-                k === "cost" ? "Cost needs Census tract boundaries — not wired up" : undefined
-              }
-              onClick={() => setLayer(k)}
-            >
-              {k[0]!.toUpperCase() + k.slice(1)}
-            </button>
-          );
-        })}
+        {(["commute", "safety"] as Layer[]).map((k) => (
+          <button
+            key={k}
+            className={layer === k ? "zone-pill on" : "zone-pill"}
+            onClick={() => setLayer(k)}
+          >
+            {k[0]!.toUpperCase() + k.slice(1)}
+          </button>
+        ))}
       </div>
 
       {layer === "commute" && (

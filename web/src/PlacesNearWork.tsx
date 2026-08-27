@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRail } from "./useRail.ts";
 import { icons } from "./icons.ts";
+import { street } from "./address.ts";
+import { milesBetween } from "./geo.ts";
 
 export type Rental = {
   address: string;
@@ -34,6 +36,24 @@ export function PlacesNearWork({
   const [loading, setLoading] = useState(false);
   const rail = useRail(result?.listings.length ?? 0);
 
+  /**
+   * The whole card is the control. A listing card has exactly one thing anyone
+   * wants from it -- the reality check -- so a separate button was a second
+   * target for the same intent, and a small one at that. The rent rides along
+   * so the cost pillar scores immediately instead of asking for it.
+   */
+  const open = (l: Rental) => onCheck(l.address, l.rent ? String(l.rent) : "");
+
+  /**
+   * Dropping a listing into a slot should not throw away its price.
+   *
+   * The address goes on text/plain so the payload stays something any drop
+   * target can read, and the rent rides on a private type beside it. A browser
+   * that refuses the custom type simply drops an address, which is what this
+   * did before -- the cost pillar then asks for the rent on the result page.
+   */
+  const RENT_TYPE = "application/x-reality-check-rent";
+
   const fetchRentals = useCallback(
     async (live: boolean) => {
       if (!at) return;
@@ -62,10 +82,7 @@ export function PlacesNearWork({
   return (
     <section>
       <div className="section-head">
-        <div>
-          <h2>Places near your work</h2>
-          <p className="sub">Rentals listed within two miles of {work || "your workplace"}.</p>
-        </div>
+        <h2>Places near your work</h2>
         {listings.length > 0 && (
           <div className="carousel-nav">
             <button onClick={() => rail.scroll(-1)} disabled={rail.atStart} aria-label="Scroll left">
@@ -78,34 +95,45 @@ export function PlacesNearWork({
             </button>
           </div>
         )}
+        <p className="sub">Rentals listed within two miles of {work || "your workplace"}.</p>
       </div>
 
       {listings.length > 0 ? (
         <>
           <div className="rail" ref={rail.ref}>
-            {listings.map((l) => (
-              <div className="spot" key={l.address}>
-                <div className="addr">{l.address.replace(/, (CA|USA)\b.*$/, "")}</div>
+            {listings.map((l) => {
+              return (
+              <div
+                className="spot"
+                key={l.address}
+                role="button"
+                tabIndex={0}
+                draggable
+                title={`Reality check ${street(l.address)}, or drag it into a slot`}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", l.address);
+                  if (l.rent) e.dataTransfer.setData(RENT_TYPE, String(l.rent));
+                  e.dataTransfer.effectAllowed = "copy";
+                  e.currentTarget.classList.add("dragging");
+                }}
+                onDragEnd={(e) => e.currentTarget.classList.remove("dragging")}
+                onClick={() => open(l)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && open(l)}
+              >
+                <img className="handle" src={icons.drag} alt="" />
+                <div className="addr">{street(l.address)}</div>
                 <p className="why">
-                  {[
-                    l.beds !== null ? (l.beds === 0 ? "Studio" : `${l.beds} bed`) : null,
-                    l.baths !== null ? `${l.baths} bath` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "Listed rental"}
+                  {at
+                    ? `${milesBetween(at, l).toFixed(1)} mi from your work.`
+                    : "Listed rental near your work."}
                 </p>
                 <p className="metric">
                   <b>{l.rent ? `$${l.rent.toLocaleString()}` : "No price"}</b>
                   <span>{l.rent ? " / mo" : ""}</span>
                 </p>
-                <button
-                  className="zone-check spot-check"
-                  onClick={() => onCheck(l.address, l.rent ? String(l.rent) : "")}
-                >
-                  Check
-                </button>
               </div>
-            ))}
+              );
+            })}
           </div>
           <p className="note" style={{ marginTop: 10 }}>
             {result?.cached ? "From cache — no lookup spent. " : "Fresh lookup. "}

@@ -157,6 +157,7 @@ export async function scoreCommute(at: LatLng, destination: string): Promise<Pil
     score,
     band,
     route: drive.route,
+    minutes: drive.minutes,
     headline: `${drive.minutes} min drive`,
     detail:
       `${drive.miles.toFixed(1)} mi to ${destination} in typical 8am traffic.` + transitNote,

@@ -1,4 +1,4 @@
-import { bandFor, GOOD, MODERATE } from "./bands.ts";
+import { verdictBandFor, VERDICT_TEXT } from "./bands.ts";
 import { scoreAmenities } from "./sources/amenities.ts";
 import { scoreCommute } from "./sources/commute.ts";
 import { scoreCost } from "./sources/cost.ts";
@@ -57,7 +57,7 @@ function summarize(score: number | null, pillars: Pillar[], priorities: Priority
     return `Not enough data to score this listing — ${missing.join(", ")} unavailable.`;
   }
 
-  const verdict = score >= GOOD ? "Looks solid" : score >= MODERATE ? "Worth a look, with caveats" : "Hard to recommend";
+  const verdict = VERDICT_TEXT[verdictBandFor(score)];
   // Lead with whatever the renter said they cared about, then the worst pillar.
   const top = live.find((p) => p.key === priorities[0]);
   const worst = [...live].sort((a, b) => a.score - b.score)[0];
@@ -84,7 +84,7 @@ export function withPillar(check: RealityCheck, next: Pillar): RealityCheck {
     ...check,
     pillars,
     score,
-    band: score === null ? null : bandFor(score),
+    band: score === null ? null : verdictBandFor(score),
     summary: summarize(score, pillars, check.priorities),
   };
 }
@@ -109,7 +109,7 @@ export async function realityCheck(
     commuteTo,
     priorities,
     score,
-    band: score === null ? null : bandFor(score),
+    band: score === null ? null : verdictBandFor(score),
     summary: summarize(score, pillars, priorities),
     pillars,
   };

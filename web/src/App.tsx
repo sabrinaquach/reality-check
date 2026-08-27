@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddListing } from "./AddListing.tsx";
 import { Onboarding } from "./Onboarding.tsx";
 import { PlacesNearWork } from "./PlacesNearWork.tsx";
 import { QuietNearby, type QuietSpot } from "./QuietNearby.tsx";
+import { AffordableNearby, type AffordableResult } from "./AffordableNearby.tsx";
 import { RealityCheckPage } from "./RealityCheckPage.tsx";
+import { ComparePage } from "./ComparePage.tsx";
 import { SavedPage } from "./SavedPage.tsx";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
 import { SignIn } from "./SignIn.tsx";
@@ -13,6 +15,9 @@ import { icons } from "./icons.ts";
 import type { Priority, RealityCheck } from "./types.ts";
 
 const ONBOARDING_KEY = "reality-check.onboarding";
+
+/** How far below the top of the window the comparison box parks. */
+const STICK_TOP = 12;
 
 type Onboarding = { work: string; priorities: Priority[] };
 
@@ -35,11 +40,51 @@ export function App() {
   const [slots, setSlots] = useState<[RealityCheck | null, RealityCheck | null]>([null, null]);
   // "Check listing" opens the single-listing result; "Add to comparison" fills a slot.
   const [detail, setDetail] = useState<RealityCheck | null>(null);
+  /** The side-by-side breakdown, opened as soon as both slots are full. */
+  const [comparing, setComparing] = useState(false);
+  /**
+   * The two listings Saved is comparing, kept apart from the board's slots.
+   *
+   * They were the same state, which meant picking a pair on Saved quietly
+   * filled the comparison box on Check a listing too -- a second screen
+   * changing under you because of something you did on this one. The board's
+   * slots belong to the board.
+   */
+  const [pair, setPair] = useState<[RealityCheck | null, RealityCheck | null]>([null, null]);
+  const pairFull = pair[0] !== null && pair[1] !== null;
   const [saved, setSaved] = useState<RealityCheck[]>(loadSaved);
   const [tab, setTab] = useState<"check" | "saved">("check");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [areas, setAreas] = useState<AffordableResult | null>(null);
+  const [areasLoading, setAreasLoading] = useState(false);
+  const [areasError, setAreasError] = useState<string | null>(null);
+
+  /**
+   * Whether the comparison box has stuck to the top of the window.
+   *
+   * A sentinel above the board is watched rather than the box itself: once the
+   * box is stuck its own position stops changing, so it can no longer tell you
+   * anything. Held as state because the condensed look is a class, and set
+   * through a callback ref so it survives the board mounting and unmounting as
+   * tabs change.
+   */
+  const [stuck, setStuck] = useState(false);
+  const stickWatcher = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    stickWatcher.current?.disconnect();
+    if (!node) {
+      setStuck(false);
+      return;
+    }
+    stickWatcher.current = new IntersectionObserver(
+      ([entry]) => setStuck(!entry?.isIntersecting),
+      { rootMargin: `-${STICK_TOP + 1}px 0px 0px 0px` },
+    );
+    stickWatcher.current.observe(node);
+  }, []);
 
   const [spots, setSpots] = useState<QuietSpot[] | null>(null);
   const [workAt, setWorkAt] = useState<{ lat: number; lng: number } | null>(null);
@@ -79,6 +124,36 @@ export function App() {
     void loadNearby(work);
   }, [work, loadNearby]);
 
+  /**
+   * Cheaper areas, from the workplace coordinates the block lookup already
+   * resolved -- so this waits for those rather than geocoding again.
+   */
+  useEffect(() => {
+    if (!workAt) return;
+    let cancelled = false;
+    setAreasLoading(true);
+    setAreasError(null);
+    fetch(`/api/affordable?lat=${workAt.lat}&lng=${workAt.lng}`)
+      .then((r) => r.json())
+      .then((body) => {
+        if (cancelled) return;
+        if (body.error) throw new Error(body.error);
+        setAreas(body as AffordableResult);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setAreasError((e as Error).message);
+          setAreas(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAreasLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workAt]);
+
   async function score(addr: string, rent: string, target: 0 | 1 | "append" | "detail") {
     setBusy(true);
     setError(null);
@@ -98,11 +173,7 @@ export function App() {
         setDetail(check);
         window.scrollTo(0, 0);
       } else {
-        setSlots(([a, b]) => {
-          if (target === 0) return [check, b];
-          if (target === 1) return [a, check];
-          return a === null ? [check, b] : [a, check];
-        });
+        fillSlot(check, target);
       }
       setAddress("");
     } catch {
@@ -115,6 +186,35 @@ export function App() {
   const slotsFull = slots[0] !== null && slots[1] !== null;
 
   /**
+   * Put a check into a slot. Filling the second one does not open the
+   * breakdown -- that is what the button is for.
+   *
+   * It used to navigate automatically, on the reasoning that comparing is the
+   * point of the board so the second slot is the answer arriving. Two things
+   * since made that wrong. The comparison box is sticky so a card can be
+   * dragged up from a rail 900px down the page, and auto-navigating meant that
+   * drag succeeded and then threw you off the page you were working on. And
+   * Saved fills its column in place when you pick two, so the same action
+   * behaving differently here is a rule to learn twice.
+   *
+   * The board is already a comparison -- two cards, side by side, with a "vs"
+   * between them. The breakdown is the detailed version, and asking for it is
+   * one click on a button that is already lit.
+   */
+  function fillSlot(check: RealityCheck, target: 0 | 1 | "append") {
+    const [a, b] = slots;
+    const next: [RealityCheck | null, RealityCheck | null] =
+      target === 0 ? [check, b] : target === 1 ? [a, check] : a === null ? [check, b] : [a, check];
+    setSlots(next);
+  }
+
+  /** Emptying a slot leaves nothing to compare, so the breakdown closes with it. */
+  function clearSlot(side: 0 | 1) {
+    setSlots(([a, b]) => (side === 0 ? [null, b] : [a, null]));
+    setComparing(false);
+  }
+
+  /**
    * Open a listing tapped on the map. It is one of the user's own, so its
    * reality check already exists -- reuse it rather than re-scoring, which
    * would cost another eight Google calls for an answer we already have.
@@ -125,12 +225,11 @@ export function App() {
    * in the slots and in Saved too, so the rent does not silently disagree
    * between screens.
    */
-  async function addRent(rent: number) {
-    if (!detail) return;
+  async function applyRent(check: RealityCheck, rent: number) {
     const res = await fetch("/api/cost", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ check: detail, rent }),
+      body: JSON.stringify({ check, rent }),
     });
     if (!res.ok) return;
     const updated = (await res.json()) as RealityCheck;
@@ -138,14 +237,60 @@ export function App() {
     const same = (c: RealityCheck | null) =>
       !!c && c.listing.address.trim().toLowerCase() === key;
 
-    setDetail(updated);
+    // Every copy of this listing, wherever it is being shown.
+    setDetail((d) => (same(d) ? updated : d));
     setSlots(([a, b]) => [same(a) ? updated : a, same(b) ? updated : b]);
+    setPair(([a, b]) => [same(a) ? updated : a, same(b) ? updated : b]);
     setSaved((list) => {
       const next = list.map((c) => (same(c) ? updated : c));
       if (next.some((c) => same(c))) persistSaved(next);
       return next;
     });
   }
+
+  /** The opened listing's own cost card, which has a check to hand. */
+  async function addRent(rent: number) {
+    if (!detail) return;
+    await applyRent(detail, rent);
+  }
+
+  /**
+   * Bring a stored check's safety pillar up to date.
+   *
+   * Saved listings are kept whole in localStorage and reopened rather than
+   * rescored, so one checked before the index learned about incident types
+   * keeps a safety pillar with no breakdown in it -- and goes on reporting
+   * that the index needs rebuilding no matter how many times it is rebuilt.
+   * Recomputing this one pillar reads the local block index only, so it is
+   * free; a full rescore would spend eight Google calls to fix it.
+   */
+  const refreshSafety = useCallback(async (check: RealityCheck) => {
+    const safety = check.pillars.find((p) => p.key === "safety");
+    if (!safety || safety.unavailable || safety.incidents) return;
+    try {
+      const res = await fetch("/api/safety", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ check }),
+      });
+      if (!res.ok) return;
+      const updated = (await res.json()) as RealityCheck;
+      const key = updated.listing.address.trim().toLowerCase();
+      const same = (c: RealityCheck | null) =>
+        !!c && c.listing.address.trim().toLowerCase() === key;
+
+      setDetail((d) => (same(d) ? updated : d));
+      setSlots(([a, b]) => [same(a) ? updated : a, same(b) ? updated : b]);
+      setSaved((list) => {
+        if (!list.some((c) => same(c))) return list;
+        const next = list.map((c) => (same(c) ? updated : c));
+        persistSaved(next);
+        return next;
+      });
+    } catch {
+      // The card still works; it just keeps the older pillar for now.
+    }
+  }, []);
 
   function openListing(address: string) {
     const key = address.trim().toLowerCase();
@@ -155,6 +300,7 @@ export function App() {
     if (known) {
       setDetail(known);
       window.scrollTo(0, 0);
+      void refreshSafety(known);
       return;
     }
     void score(address, "", "detail");
@@ -193,13 +339,13 @@ export function App() {
         <img className="logo" src={icons.logo} alt="Reality Check" />
         <button
           className={tab === "check" ? "navlink on" : "navlink"}
-          onClick={() => { setTab("check"); setDetail(null); }}
+          onClick={() => { setTab("check"); setDetail(null); setComparing(false); }}
         >
           Check a listing
         </button>
         <button
           className={tab === "saved" ? "navlink on" : "navlink"}
-          onClick={() => { setTab("saved"); setDetail(null); }}
+          onClick={() => { setTab("saved"); setDetail(null); setComparing(false); }}
         >
           Saved{saved.length ? ` (${saved.length})` : ""}
         </button>
@@ -211,15 +357,111 @@ export function App() {
         {tab === "saved" ? (
           <SavedPage
             saved={saved}
-            slotsFull={slotsFull}
-            onOpen={(c) => { setTab("check"); setDetail(c); window.scrollTo(0, 0); }}
-            onAdd={(c) => {
-              setSlots(([a, b]) => (a === null ? [c, b] : b === null ? [a, c] : [a, b]));
-              setTab("check");
-              window.scrollTo(0, 0);
+            pairFull={pairFull}
+            /**
+             * Stay on Saved and open the listing in the right-hand column, so
+             * the ranking is still there to move around in. Opening one listing
+             * is a different question from comparing two, so it takes the
+             * column back from the breakdown.
+             */
+            /**
+             * Opening a listing shows its reality check but leaves the pair
+             * alone. Clearing it here meant a stray click on a card wiped both
+             * selections, which read as "unselecting one dropped the other".
+             */
+            onOpen={(c) => {
+              setDetail(c);
+              void refreshSafety(c);
+            }}
+            openKey={
+              pairFull ? null : detail ? detail.listing.address.trim().toLowerCase() : null
+            }
+            /**
+             * The right-hand column answers whichever question was asked last:
+             * two listings picked shows the breakdown, one opened shows its
+             * reality check, and neither leaves the map.
+             */
+            /**
+             * Two picked shows the breakdown; anything less shows whichever
+             * listing was opened, or the map. Unpicking one therefore leaves
+             * the other selected and simply steps back to the single view.
+             */
+            detail={
+              pair[0] && pair[1] ? (
+                <ComparePage
+                  inline
+                  a={pair[0]}
+                  b={pair[1]}
+                  onOpen={(c) => {
+                    setDetail(c);
+                    void refreshSafety(c);
+                  }}
+                  onRent={applyRent}
+                  listings={mapListings}
+                  onCheck={(addr) => score(addr, "", "detail")}
+                  onAdd={openListing}
+                />
+              ) : detail ? (
+                <RealityCheckPage
+                  inline
+                  check={detail}
+                  saved={isSaved(saved, detail)}
+                  onToggleSave={() => setSaved((list) => toggleSaved(list, detail))}
+                  onRent={addRent}
+                  listings={mapListings}
+                  onCheck={(addr) => score(addr, "", "detail")}
+                  onAdd={openListing}
+                />
+              ) : undefined
+            }
+            /**
+             * Picking works both ways, and never touches the board: this pair
+             * lives and dies on the Saved page.
+             */
+            onToggleCompare={(c) => {
+              const key = c.listing.address.trim().toLowerCase();
+              const same = (x: RealityCheck | null) =>
+                !!x && x.listing.address.trim().toLowerCase() === key;
+              setPair(([a, b]) => {
+                if (same(a)) return [b, null];
+                if (same(b)) return [a, null];
+                if (!a) return [c, b];
+                if (!b) return [a, c];
+                /**
+                 * Both taken, and the design still gives the faded cards a
+                 * pick circle -- so they have to do something. The pair rolls:
+                 * the older listing drops out and the new one is compared
+                 * against whichever was picked most recently.
+                 */
+                return [b, c];
+              });
+            }}
+            inComparison={(c) => {
+              const key = c.listing.address.trim().toLowerCase();
+              return pair.some((p) => !!p && p.listing.address.trim().toLowerCase() === key);
             }}
             onRemove={(c) => setSaved((list) => removeSaved(list, c))}
             onBrowse={() => setTab("check")}
+            at={workAt}
+            listings={mapListings}
+            onCheck={(addr) => score(addr, "", "detail")}
+            onAdd={openListing}
+          />
+        ) : comparing && slots[0] && slots[1] ? (
+          <ComparePage
+            a={slots[0]}
+            b={slots[1]}
+            onRent={applyRent}
+            onBack={() => setComparing(false)}
+            onOpen={(c) => {
+              setComparing(false);
+              setDetail(c);
+              window.scrollTo(0, 0);
+              void refreshSafety(c);
+            }}
+            listings={mapListings}
+            onCheck={(addr) => score(addr, "", "detail")}
+            onAdd={openListing}
           />
         ) : detail ? (
           <RealityCheckPage
@@ -243,21 +485,47 @@ export function App() {
           </button>
         </p>
 
+        {/* Watched, not drawn: the moment this scrolls out of view is the
+            moment the box below it parks at the top. */}
+        <div ref={sentinelRef} className="stick-sentinel" aria-hidden="true" />
+
         <div className="layout">
-          <div className="slots">
+          <div className={stuck ? "slots stuck" : "slots"}>
               <Slot
                 ordinal="1st"
                 check={slots[0]}
-                onClear={() => setSlots(([, b]) => [null, b])}
-                onDropAddress={(a) => score(a, "", 0)}
+                onClear={() => clearSlot(0)}
+                onDropAddress={(a, rent) => score(a, rent ?? "", 0)}
               />
               <span className="vs">vs</span>
               <Slot
                 ordinal="2nd"
                 check={slots[1]}
-                onClear={() => setSlots(([a]) => [a, null])}
-                onDropAddress={(a) => score(a, "", 1)}
+                onClear={() => clearSlot(1)}
+                onDropAddress={(a, rent) => score(a, rent ?? "", 1)}
               />
+
+              {/* Figma node 2114:851 makes this a fixed part of the compare
+                  box rather than something that appears, so it sits here from
+                  the start and waits for the second listing. It doubles as the
+                  way back into the breakdown after backing out of it: both
+                  slots full is the only state that reaches it, and by then
+                  there is no second slot left to fill. */}
+              <button
+                className="recompare"
+                disabled={!slotsFull}
+                title={
+                  slotsFull
+                    ? "Open the detailed breakdown"
+                    : "Add two listings to compare them"
+                }
+                onClick={() => {
+                  setComparing(true);
+                  window.scrollTo(0, 0);
+                }}
+              >
+                Compare listings
+              </button>
           </div>
 
           <AddListing
@@ -281,14 +549,26 @@ export function App() {
               spots={spots}
               loading={spotsLoading}
               error={spotsError}
-              onPick={(addr) => setAddress(addr)}
+              onCheck={(addr) => score(addr, "", "detail")}
+            />
+
+            <AffordableNearby
+              work={work}
+              result={areas}
+              loading={areasLoading}
+              error={areasError}
+              onCheck={(addr) => score(addr, "", "detail")}
             />
           </div>
 
           <div className="col fill">
             <section>
+              {/* The subtitle is not decoration: both sections in the left
+                  column carry one, and without it this header is a line
+                  shorter, so the map started 18px above their cards. */}
               <div className="section-head">
                 <h2>Commute &amp; safety zone</h2>
+                <p className="sub">Drive time and safety near your work.</p>
               </div>
               <ZoneMap
                 center={workAt}

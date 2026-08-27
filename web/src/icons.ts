@@ -29,6 +29,8 @@ export const icons = {
   modeTransit: "/icons/mode-transit.svg",
   modeBicycling: "/icons/mode-bicycling.svg",
   modeWalking: "/icons/mode-walking.svg",
+  /** Green tick marking the better listing on the comparison page. */
+  check: "/icons/check.svg",
   expandRing: "/icons/expand-ring.svg",
   expand: "/icons/expand.svg",
 } as const;

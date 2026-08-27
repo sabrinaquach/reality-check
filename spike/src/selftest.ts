@@ -7,7 +7,7 @@ import { commuteScore } from "./sources/commute.ts";
 import { costScore } from "./sources/cost.ts";
 import { proximityScore } from "./sources/amenities.ts";
 import { percentileOf } from "./sources/safety.ts";
-import { bandFor, GOOD, MODERATE } from "./bands.ts";
+import { bandFor, GOOD, MODERATE, verdictBandFor, VERDICT_GOOD, VERDICT_MODERATE, VERDICT_TEXT } from "./bands.ts";
 import { composite, weightFor } from "./score.ts";
 import type { Pillar, Priority } from "./types.ts";
 
@@ -60,6 +60,14 @@ check("Almaden Valley (90) reads good", bandFor(90) === "good");
 check("Willow Glen (61) reads good", bandFor(61) === "good");
 check("Berryessa (38) reads moderate", bandFor(38) === "moderate");
 check("Downtown (2) reads poor", bandFor(2) === "poor");
+
+// The overall verdict is stricter than the pillar bands, and its words and its
+// colour have to come from the same cut -- a green chip reading "Not the best
+// choice" would be the page arguing with itself.
+check("80 is the verdict's green cut", verdictBandFor(VERDICT_GOOD) === "good" && verdictBandFor(79) === "moderate");
+check("70 is the verdict's red cut", verdictBandFor(VERDICT_MODERATE) === "moderate" && verdictBandFor(69) === "poor");
+check("verdict wording follows the band", VERDICT_TEXT[verdictBandFor(85)] === "Looks solid" && VERDICT_TEXT[verdictBandFor(75)] === "Okay" && VERDICT_TEXT[verdictBandFor(50)] === "Not the best choice");
+check("the verdict is stricter than the pillar band", verdictBandFor(65) === "poor" && bandFor(65) === "good");
 
 console.log("\nweighting");
 const priorities: Priority[] = ["safety", "commute"];

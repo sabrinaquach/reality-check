@@ -26,3 +26,31 @@ export const MODERATE = 30;
 export function bandFor(score: number): Band {
   return score >= GOOD ? "good" : score >= MODERATE ? "moderate" : "poor";
 }
+
+/**
+ * The verdict on a whole listing is a stricter question than the verdict on
+ * any one pillar.
+ *
+ * A composite of 65 is not one bad pillar dragging three good ones down -- the
+ * weighting means it is more or less everything sitting around 65, nothing
+ * broken and nothing good either. Calling that green oversells it to someone
+ * about to sign a year's lease, so the overall score turns green only at 80
+ * and red below 70.
+ *
+ * The pillar cuts above deliberately stay where the neighbourhood calibration
+ * put them: they answer "is this commute good", which is a different and more
+ * forgiving question than "should I take this place".
+ */
+export const VERDICT_GOOD = 80;
+export const VERDICT_MODERATE = 70;
+
+export function verdictBandFor(score: number): Band {
+  return score >= VERDICT_GOOD ? "good" : score >= VERDICT_MODERATE ? "moderate" : "poor";
+}
+
+/** The words that go with each verdict band, so the page and the CLI agree. */
+export const VERDICT_TEXT: Record<Band, string> = {
+  good: "Looks solid",
+  moderate: "Okay",
+  poor: "Not the best choice",
+};

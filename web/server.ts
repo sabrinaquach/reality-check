@@ -13,6 +13,8 @@ import { rentalsNear } from "../spike/src/sources/listings.ts";
 import { realityCheck, withPillar } from "../spike/src/score.ts";
 import { commuteModes, type ModeTime } from "../spike/src/sources/commute.ts";
 import { scoreCost } from "../spike/src/sources/cost.ts";
+import { scoreSafety } from "../spike/src/sources/safety.ts";
+import { affordableNear } from "../spike/src/sources/affordable.ts";
 import type { Priority, RealityCheck } from "../spike/src/types.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -181,6 +183,34 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  /**
+   * Recompute just the safety pillar for a check the client already holds.
+   *
+   * Saved listings are stored whole, in the browser, forever -- that is what
+   * lets the Saved tab reopen a result without paying for the Google calls
+   * again. The cost is that a check scored before the index learned about
+   * incident types keeps its old safety pillar for good, and the card goes on
+   * saying the breakdown is missing however many times the index is rebuilt.
+   *
+   * This reads the local block index and nothing else, so refreshing costs no
+   * quota from anyone -- unlike a full rescore, which would spend eight Google
+   * calls to fix one pillar.
+   */
+  if (url.pathname === "/api/safety" && req.method === "POST") {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { check?: RealityCheck };
+      const check = body.check;
+      if (!check?.listing) return send(res, 400, { error: "A check is required." });
+      const pillar = await scoreSafety({ lat: check.listing.lat, lng: check.listing.lng });
+      return send(res, 200, withPillar(check, pillar));
+    } catch (e) {
+      console.error("safety rescore failed:", e);
+      return send(res, 500, { error: (e as Error).message });
+    }
+  }
+
   // Every mode for one trip, for the commute card's expanded view.
   if (url.pathname === "/api/commute") {
     const lat = Number(url.searchParams.get("lat"));
@@ -253,6 +283,28 @@ const server = createServer(async (req, res) => {
       });
     } catch (e) {
       console.error("blocks failed:", e);
+      return send(res, 500, { error: (e as Error).message });
+    }
+  }
+
+  /**
+   * The cheapest neighbourhoods near where you work.
+   *
+   * Two public Census requests for a whole county, then served from disk for a
+   * month -- so unlike the rentals rail this one costs nothing per visitor and
+   * needs no budget guard.
+   */
+  if (url.pathname === "/api/affordable") {
+    const lat = Number(url.searchParams.get("lat"));
+    const lng = Number(url.searchParams.get("lng"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return send(res, 400, { error: "lat and lng are required." });
+    }
+    const radius = Number(url.searchParams.get("radius")) || 5;
+    try {
+      return send(res, 200, await affordableNear({ lat, lng }, radius));
+    } catch (e) {
+      console.error("affordable failed:", e);
       return send(res, 500, { error: (e as Error).message });
     }
   }

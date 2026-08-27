@@ -1,5 +1,6 @@
 import { useRail } from "./useRail.ts";
 import { icons } from "./icons.ts";
+import { pretty } from "./address.ts";
 import type { Band } from "./types.ts";
 
 export type QuietSpot = {
@@ -11,28 +12,23 @@ export type QuietSpot = {
   miles: number;
 };
 
-/** SJPD publishes block addresses in caps; the cards should not shout. */
-function pretty(address: string): string {
-  return address
-    .toLowerCase()
-    .replace(/\b[a-z]/g, (c) => c.toUpperCase())
-    .replace(/\bAv\b/, "Ave")
-    .replace(/\bDr\b/, "Dr")
-    .replace(/\bCt\b/, "Ct");
-}
-
 export function QuietNearby({
   work,
   spots,
   loading,
   error,
-  onPick,
+  onCheck,
 }: {
   work: string;
   spots: QuietSpot[] | null;
   loading: boolean;
   error: string | null;
-  onPick: (address: string) => void;
+  /**
+   * Open this block's own reality check. Clicking used to drop the address
+   * into the sidebar form, which left the reader to press a second button to
+   * get the thing they had already asked for.
+   */
+  onCheck: (address: string) => void;
 }) {
   const rail = useRail(spots?.length ?? 0);
   const has = spots && spots.length > 0;
@@ -40,10 +36,7 @@ export function QuietNearby({
   return (
     <section>
       <div className="section-head">
-        <div>
-          <h2>Safest neighborhoods nearby</h2>
-          <p className="sub">Drag a card into a slot above, or use the form to add a new one.</p>
-        </div>
+        <h2>Safest neighborhoods nearby</h2>
         {has && (
           <div className="carousel-nav">
             <button onClick={() => rail.scroll(-1)} disabled={rail.atStart} aria-label="Scroll left">
@@ -56,6 +49,7 @@ export function QuietNearby({
             </button>
           </div>
         )}
+        <p className="sub">Drag a card into a slot above, or use the form to add a new one.</p>
       </div>
 
       {loading && <p className="note">Reading the block index…</p>}
@@ -86,8 +80,9 @@ export function QuietNearby({
                   e.currentTarget.classList.add("dragging");
                 }}
                 onDragEnd={(e) => e.currentTarget.classList.remove("dragging")}
-                onClick={() => onPick(full)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onPick(full)}
+                title={`Reality check ${pretty(s.address)}, or drag it into a slot`}
+                onClick={() => onCheck(full)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onCheck(full)}
               >
                 <img className="handle" src={icons.drag} alt="" />
                 <div className="addr">{pretty(s.address)}</div>

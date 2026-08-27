@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { icons } from "./icons.ts";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
+import { CommuteModes, CostBasis, IncidentBreakdown } from "./PillarDetail.tsx";
+import { explainCheck } from "./explain.ts";
 import type { Pillar, RealityCheck } from "./types.ts";
 
 /**
@@ -18,31 +20,6 @@ const SECTIONS: { key: Pillar["key"]; title: string; icon: string; size: number 
 ];
 
 const BAND_LABEL = { good: "Good", moderate: "Moderate", poor: "Poor" } as const;
-
-/**
- * The design writes one sentence across the pillars. Composed here rather than
- * in the engine because it is presentation: the engine's own `summary` stays
- * the single source for the verdict at the end.
- */
-function headline(check: RealityCheck): string {
-  const get = (k: Pillar["key"]) => check.pillars.find((p) => p.key === k);
-  const commute = get("commute");
-  const safety = get("safety");
-  const cost = get("cost");
-
-  const parts: string[] = [];
-  if (commute && !commute.unavailable) parts.push(commute.headline.toLowerCase());
-  if (safety && !safety.unavailable) parts.push(`${safety.band} safety`);
-  if (cost && !cost.unavailable && check.listing.rent) {
-    parts.push(`rent of $${check.listing.rent.toLocaleString()}/mo`);
-  }
-
-  const verdict = check.summary.split(" — ")[0]!.toLowerCase().replace(/\.$/, "");
-  if (!parts.length) return check.summary;
-  const last = parts.pop()!;
-  const list = parts.length ? `${parts.join(", ")}, and ${last}` : last;
-  return `${list[0]!.toUpperCase()}${list.slice(1)} — ${verdict}.`;
-}
 
 /**
  * The cost pillar reports the tract median even with no rent to compare it to,
@@ -92,27 +69,9 @@ function RentPrompt({
   );
 }
 
-type ModeTime = { mode: "driving" | "transit" | "walking" | "bicycling"; minutes: number; miles: number };
-
-/** Exported from the Figma file, same set and stroke weight as the rest. */
-const MODE_LABEL: Record<ModeTime["mode"], { icon: string | null; label: string }> = {
-  driving: { icon: null, label: "Driving" },
-  transit: { icon: icons.modeTransit, label: "Transit" },
-  bicycling: { icon: icons.modeBicycling, label: "Cycling" },
-  walking: { icon: icons.modeWalking, label: "Walking" },
-};
-
 /**
- * The commute card opens to show the trip by the modes the headline does not
- * already cover -- driving is the headline, so repeating it here would just
- * restate the line above.
- *
- * These are extra API calls, so nothing is fetched until the card is actually
- * opened.
- *
- * No rideshare row: Uber and Lyft publish no ETA or fare API without a partner
- * account. Deriving one from the drive time would sit in this list looking
- * exactly as measured as the rows either side of it, so there is none.
+ * The commute card opens to show the trip by the other travel modes. The panel
+ * itself is shared with the comparison page -- see PillarDetail.
  */
 function CommuteCard({
   pillar,
@@ -128,24 +87,6 @@ function CommuteCard({
   size: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [modes, setModes] = useState<ModeTime[] | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (!next || modes || !to) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/commute?lat=${at.lat}&lng=${at.lng}&to=${encodeURIComponent(to)}`);
-      const body = await res.json();
-      setModes(body.modes ?? []);
-    } catch {
-      setModes([]);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div className={open ? "rc-card open" : "rc-card"}>
@@ -157,7 +98,7 @@ function CommuteCard({
       </div>
       <button
         className="rc-chev"
-        onClick={toggle}
+        onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={open ? "Hide other travel modes" : "Show other travel modes"}
         title={open ? "Hide other ways to travel" : "Other ways to travel"}
@@ -165,24 +106,78 @@ function CommuteCard({
         <img src={icons.chevron} alt="" />
       </button>
 
-      {open && (
-        <div className="rc-modes">
-          <p className="rc-modes-head">Other ways to make this trip</p>
-          {loading && <p className="rc-detail">Routing the other modes…</p>}
-          {modes?.length === 0 && !loading && (
-            <p className="rc-detail">No other routes available for this trip.</p>
-          )}
-          {modes?.map((m) => (
-            <div className="rc-mode" key={m.mode}>
-              {MODE_LABEL[m.mode].icon && (
-                <img className="m-icon" src={MODE_LABEL[m.mode].icon!} alt="" />
-              )}
-              <span className="m-label">{MODE_LABEL[m.mode].label}</span>
-              <span className="m-time">{m.minutes} min</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {open && <CommuteModes at={at} to={to} />}
+    </div>
+  );
+}
+
+/**
+ * The safety card opens to show what the calls nearby actually were.
+ *
+ * The score answers "how much", which leaves the more useful question
+ * unanswered: two neighbourhoods can land on the same number because one is
+ * loud on weekends and the other has cars broken into all week, and a renter
+ * would pick differently between them. The breakdown ships with the pillar --
+ * it is read out of the same block index the score comes from -- so opening
+ * this costs no request.
+ */
+function SafetyCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size: number }) {
+  const [open, setOpen] = useState(false);
+  const groups = pillar.incidents ?? [];
+
+  return (
+    <div className={open ? "rc-card open" : "rc-card"}>
+      <div className="rc-head">
+        <span className={`rc-chip ${pillar.band}`}>{BAND_LABEL[pillar.band]}</span>
+        <p className="rc-headline">{pillar.headline}</p>
+        <p className="rc-detail">{pillar.detail}</p>
+        <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
+      </div>
+      <button
+        className="rc-chev"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? "Hide what the incidents were" : "Show what the incidents were"}
+        title={open ? "Hide the incident breakdown" : "What kind of incidents?"}
+      >
+        <img src={icons.chevron} alt="" />
+      </button>
+
+      {open && <IncidentBreakdown incidents={groups} />}
+    </div>
+  );
+}
+
+/**
+ * Cost opens to the two figures the score is made of.
+ *
+ * It is the pillar whose headline is hardest to act on -- "$195 more than
+ * typical" is only bad news if you know what "typical" counts, and it counts
+ * leases signed years ago. The panel says so, and it is the same one the
+ * comparison page opens.
+ */
+function CostCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size: number }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={open ? "rc-card open" : "rc-card"}>
+      <div className="rc-head">
+        <span className={`rc-chip ${pillar.band}`}>{BAND_LABEL[pillar.band]}</span>
+        <p className="rc-headline">{pillar.headline}</p>
+        <p className="rc-detail">{pillar.detail}</p>
+        <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
+      </div>
+      <button
+        className="rc-chev"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? "Hide how the cost was measured" : "Show how the cost was measured"}
+        title={open ? "Hide the figures" : "Where does 'typical' come from?"}
+      >
+        <img src={icons.chevron} alt="" />
+      </button>
+
+      {open && <CostBasis pillar={pillar} />}
     </div>
   );
 }
@@ -215,6 +210,7 @@ function PillarCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size
 export function RealityCheckPage({
   check,
   onBack,
+  inline = false,
   saved,
   onToggleSave,
   onRent,
@@ -224,7 +220,16 @@ export function RealityCheckPage({
   slotsFull,
 }: {
   check: RealityCheck;
-  onBack: () => void;
+  /**
+   * Leave undefined when the page is embedded and there is nowhere to go back
+   * to -- the Saved list beside it is already the way out.
+   */
+  onBack?: () => void;
+  /**
+   * Rendered inside another screen's column rather than as the whole page, so
+   * it drops the centred 956px measure and fills whatever it is given.
+   */
+  inline?: boolean;
   saved: boolean;
   onToggleSave: () => void;
   /** Fill in a missing rent and rescore just the cost pillar. */
@@ -240,44 +245,73 @@ export function RealityCheckPage({
   const half = Math.ceil(items.length / 2);
   const columns = [items.slice(0, half), items.slice(half)];
 
-  return (
-    <div className="rc">
-      <div className="rc-top">
-        <button className="circle" onClick={onBack} aria-label="Back to comparison">
-          <img className="ring" src={icons.circleBtn} alt="" />
-          <img className="glyph" src={icons.back} alt="" style={{ width: 24, height: 24 }} />
-        </button>
-        <span className="spacer" />
-        <button
-          className="circle"
-          onClick={onToggleSave}
-          aria-pressed={saved}
-          title={saved ? "Remove from saved" : "Save this listing"}
-          aria-label={saved ? "Remove from saved" : "Save this listing"}
-        >
-          <img className="ring" src={icons.circleBtn} alt="" />
-          {/* Filled once saved; the outline is the same path with no fill. */}
-          <img
-            className="glyph"
-            src={saved ? icons.heart : icons.heartOutline}
-            alt=""
-            style={{ width: 31, height: 31 }}
-          />
-        </button>
-      </div>
+  const heart = (
+    <button
+      className="circle"
+      onClick={onToggleSave}
+      aria-pressed={saved}
+      title={saved ? "Remove from saved" : "Save this listing"}
+      aria-label={saved ? "Remove from saved" : "Save this listing"}
+    >
+      <img className="ring" src={icons.circleBtn} alt="" />
+      {/* Filled once saved; the outline is the same path with no fill. */}
+      <img
+        className="glyph"
+        src={saved ? icons.heart : icons.heartOutline}
+        alt=""
+        style={{ width: 31, height: 31 }}
+      />
+    </button>
+  );
 
-      <h1>Reality check</h1>
+  const scoreChip =
+    check.score !== null ? (
+      <span className={`rc-score ${check.band ?? ""}`}>{check.score}% score</span>
+    ) : null;
+
+  return (
+    <div className={inline ? "rc rc-inline" : "rc"}>
+      {/*
+       * Embedded, the heading row carries the heart and the score with it
+       * (Figma node 2135:5355): there is no back button to anchor a row of its
+       * own, and the score sits opposite the title rather than trailing the
+       * address. On the full page the score stays in the meta line, where node
+       * 2136:6532 puts it.
+       */}
+      {/* On the full page the heart pairs with the back arrow, one control at
+          each end of its own row. Embedded there is no back arrow and so no
+          row, and the heart travels with the title instead. */}
+      {!inline && (
+        <div className="rc-top">
+          {onBack && (
+            <button className="circle" onClick={onBack} aria-label="Back to comparison">
+              <img className="ring" src={icons.circleBtn} alt="" />
+              <img className="glyph" src={icons.back} alt="" style={{ width: 24, height: 24 }} />
+            </button>
+          )}
+          <span className="spacer" />
+          {heart}
+        </div>
+      )}
+
+      {/* The score sits beside the heading on both, because it is the headline
+          fact about the listing rather than a tail on the address. */}
+      <div className="rc-head-row">
+        <h1>Reality check</h1>
+        {inline && heart}
+        <span className="spacer" />
+        {scoreChip}
+      </div>
 
       <div className="rc-meta">
         <span>{check.listing.address}</span>
         <img className="rc-dot" src={icons.dot} alt="" />
         <span>{check.listing.rent ? `$${check.listing.rent.toLocaleString()} / mo` : "No rent given"}</span>
-        {check.score !== null && (
-          <span className={`rc-score ${check.band ?? ""}`}>{check.score}% score</span>
-        )}
       </div>
 
-      <p className="rc-summary">{headline(check)}</p>
+      {/* Why this scores what it does, in minutes and rent and police calls
+          rather than in the words the scoring uses to itself. */}
+      <p className="rc-summary">{explainCheck(check)}</p>
 
       {SECTIONS.map(({ key, title, icon, size }) => {
         const pillar = check.pillars.find((p) => p.key === key);
@@ -297,6 +331,10 @@ export function RealityCheckPage({
                 icon={icon}
                 size={size}
               />
+            ) : key === "safety" && !pillar.unavailable ? (
+              <SafetyCard pillar={pillar} icon={icon} size={size} />
+            ) : key === "cost" && !pillar.unavailable ? (
+              <CostCard pillar={pillar} icon={icon} size={size} />
             ) : needsRent ? (
               <RentPrompt
                 pillar={pillar}
