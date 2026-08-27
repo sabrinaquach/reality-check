@@ -295,12 +295,18 @@ export function RealityCheckPage({
       )}
 
       {/* The score sits beside the heading on both, because it is the headline
-          fact about the listing rather than a tail on the address. */}
+          fact about the listing rather than a tail on the address.
+       *
+       * Embedded, the heart is the row's last item rather than the title's
+       * neighbour: the Saved column hangs its expand control off this same
+       * line, and the two round 39px controls belong together at that end
+       * instead of one by the title and one across the row from it.
+       */}
       <div className="rc-head-row">
         <h1>Reality check</h1>
-        {inline && heart}
         <span className="spacer" />
         {scoreChip}
+        {inline && heart}
       </div>
 
       <div className="rc-meta">

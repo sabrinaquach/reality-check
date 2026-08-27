@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { icons } from "./icons.ts";
 import { withoutState } from "./address.ts";
 import { ScoreRing } from "./ScoreRing.tsx";
@@ -12,18 +12,24 @@ import type { RealityCheck } from "./types.ts";
  * board carries. The ranking is the point of the screen: the subtitle promises
  * an order, so the list is sorted rather than left in the order things were
  * saved, and the leader is called out.
+ *
+ * Clicking a card is the only interaction: it selects that listing, which
+ * fills the right-hand column with its reality check. Selecting a second
+ * compares the two, clicking a selected card again puts it back, and a third
+ * rolls the older of the pair out. Opening and comparing used to be two
+ * separate gestures -- the card body and a radio beside it -- which meant two
+ * ways to fill one column and a card that could be "open" and "picked" at the
+ * same time, wearing the same recessed look for two different reasons.
  */
 
 export function SavedPage({
   saved,
   pairFull,
-  onOpen,
-  onToggleCompare,
-  inComparison,
+  onSelect,
+  isSelected,
   onRemove,
   onBrowse,
   detail,
-  openKey,
   at,
   listings = [],
   onCheck,
@@ -32,20 +38,23 @@ export function SavedPage({
   saved: RealityCheck[];
   /** Both comparison places on this page are taken. Not the board's slots. */
   pairFull: boolean;
-  onOpen: (check: RealityCheck) => void;
-  /** Put this listing in a comparison slot, or take it back out. */
-  onToggleCompare: (check: RealityCheck) => void;
-  inComparison: (check: RealityCheck) => boolean;
+  /**
+   * Select this listing, or take the selection back off it. One click is the
+   * whole interaction on this screen: selecting one listing shows its reality
+   * check, selecting a second compares the two, and clicking a selected card
+   * again puts it back.
+   */
+  onSelect: (check: RealityCheck) => void;
+  isSelected: (check: RealityCheck) => boolean;
   onRemove: (check: RealityCheck) => void;
   onBrowse: () => void;
   /**
-   * The opened listing's reality check, rendered in the right column in place
-   * of the map (Figma node 2135:5355). Composed by the caller so this screen
-   * does not have to carry every prop the reality check needs.
+   * What the selection is showing: one listing's reality check, or the
+   * side-by-side breakdown of two (Figma node 2135:5355). Rendered in the
+   * right column in place of the map, and composed by the caller so this
+   * screen does not have to carry every prop those pages need.
    */
   detail?: ReactNode;
-  /** Lowercased address of the opened listing, so its card can show as open. */
-  openKey?: string | null;
   /** Where to centre the map: the workplace, as on the board. */
   at: { lat: number; lng: number } | null;
   listings?: MapListing[];
@@ -84,46 +93,50 @@ export function SavedPage({
           </div>
         ) : (
           ranked.map((check, i) => {
-            const picked = inComparison(check);
-            const open = openKey === check.listing.address.trim().toLowerCase();
+            const selected = isSelected(check);
             /**
-             * Once both comparison slots are full the two chosen listings are
-             * the subject of the whole right-hand column, so everything else
-             * steps back rather than competing with them (Figma 2135:4846).
+             * Once both places are taken the two selected listings are the
+             * subject of the whole right-hand column, so everything else steps
+             * back rather than competing with them (Figma 2135:4846).
              */
-            const dim = pairFull && !picked && !open;
+            const dim = pairFull && !selected;
             /**
-             * `on` is the recessed look, worn by whichever card the right-hand
-             * column is about. `picked` is narrower: only a card actually in a
-             * comparison slot gives up its radio.
-             *
-             * Conflating the two made comparing impossible with two saved
-             * listings -- opening one hid its radio, picking the other hid
-             * that one, and there was nothing left to click.
+             * Node 2136:7321: a selected card is recessed and drops its circle,
+             * with the text and the ring shifted into that lane. Selecting and
+             * unselecting are both a click on the card itself, so the circle is
+             * free to go -- see .saved-card.no-pick.
              */
-            const state = [picked ? "picked" : "", picked || open ? "on" : "", dim ? "dim" : ""]
+            const state = [selected ? "on no-pick" : "", dim ? "dim" : ""]
               .filter(Boolean)
               .join(" ");
             return (
               <div className={`saved-card${state ? " " + state : ""}`} key={check.listing.address}>
-                {/* The design's circle on the left edge. It is the comparison
-                    slot: filled when this listing is in one, which is the only
-                    honest thing a control shaped like a radio can mean. */}
-                <button
-                  className={picked ? "saved-pick on" : "saved-pick"}
-                  onClick={() => onToggleCompare(check)}
-                  aria-pressed={picked}
-                  title={
-                    picked
-                      ? "Remove from the comparison"
-                      : pairFull
-                        ? "Compare this instead of the earlier pick"
-                        : "Add to the comparison"
-                  }
-                  aria-label={`${picked ? "Remove" : "Add"} ${withoutState(check.listing.address)} ${picked ? "from" : "to"} the comparison`}
-                />
+                {/* The design's circle on the left edge: this listing's place
+                    in the comparison, empty until it is selected. A redundant
+                    hit target rather than a control of its own -- the card
+                    behind it already toggles the selection -- so it is hidden
+                    from assistive tech instead of announcing itself twice. */}
+                {!selected && (
+                  <button
+                    className="saved-pick"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    onClick={() => onSelect(check)}
+                  />
+                )}
 
-                <button className="saved-open" onClick={() => onOpen(check)}>
+                <button
+                  className="saved-open"
+                  onClick={() => onSelect(check)}
+                  aria-pressed={selected}
+                  title={
+                    selected
+                      ? "Unselect this listing"
+                      : pairFull
+                        ? "Compare this instead of the earlier selection"
+                        : "Select this listing"
+                  }
+                >
                   <span className={i === 0 ? "saved-rank best" : "saved-rank"}>
                     {i === 0 ? "#1 Best match" : `#${i + 1}`}
                   </span>
@@ -162,7 +175,9 @@ export function SavedPage({
           the reader can move between listings without losing their place. The
           map is what the column shows when nothing is open -- and the reality
           check carries its own copy of that map at the bottom anyway. */}
-      {detail ?? (
+      {detail ? (
+        <DetailPanel>{detail}</DetailPanel>
+      ) : (
         <div className="saved-map">
           <h2>Commute &amp; safety zone</h2>
           <ZoneMap
@@ -175,5 +190,56 @@ export function SavedPage({
         </div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * The right-hand column, with a control for giving it the whole window.
+ *
+ * A reality check and a two-up breakdown are both wider than the 730px this
+ * column has beside the list, and the breakdown especially -- two cards, four
+ * pillars, side by side in half the room the standalone page gives them. So
+ * the panel borrows the map's expand: the same circular button in the same
+ * corner, the same scrim, the same Escape, because it is the same gesture
+ * applied to the other half of the screen.
+ */
+function DetailPanel({ children }: { children: ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Escape closes it, and the page behind it should not scroll.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setExpanded(false);
+    document.addEventListener("keydown", onKey);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [expanded]);
+
+  return (
+    <>
+      {expanded && (
+        <div className="zone-scrim" onClick={() => setExpanded(false)} role="presentation" />
+      )}
+      <div className={`saved-detail${expanded ? " expanded" : ""}`}>
+        <button
+          className="saved-expand"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? "Shrink back to the column" : "Expand to fill the window"}
+          title={expanded ? "Shrink (Esc)" : "Expand"}
+          aria-expanded={expanded}
+        >
+          {/* Figma 2181:7598 expanded, 2181:7597 to come back. Each asset is
+              the whole control, circle included, so the button behind it draws
+              nothing of its own. */}
+          <img src={expanded ? icons.panelMinimize : icons.panelExpand} alt="" />
+        </button>
+        {children}
+      </div>
+    </>
   );
 }

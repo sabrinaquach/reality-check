@@ -9,7 +9,10 @@ import { ComparePage } from "./ComparePage.tsx";
 import { SavedPage } from "./SavedPage.tsx";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
 import { SignIn } from "./SignIn.tsx";
-import { isSaved, loadSaved, persistSaved, removeSaved, toggleSaved } from "./saved.ts";
+import { AccountMenu } from "./AccountMenu.tsx";
+import { isSaved, persistSaved, removeSaved, toggleSaved } from "./saved.ts";
+import { fetchSavedFromServer, fetchSession, signOut, type Account } from "./auth.ts";
+import { addressIntent, forgetIntent, rememberIntent, takeIntent, type Intent } from "./pending.ts";
 import { Slot } from "./Slot.tsx";
 import { icons } from "./icons.ts";
 import type { Priority, RealityCheck } from "./types.ts";
@@ -36,6 +39,14 @@ export function App() {
   const [priorities, setPriorities] = useState<Priority[]>(onboard?.priorities ?? []);
   const [onboarding, setOnboarding] = useState(!onboard?.work);
   const [signIn, setSignIn] = useState(false);
+  const [account, setAccount] = useState<Account | null>(null);
+  /** Whether this server has Google credentials at all -- the modal needs to know. */
+  const [googleReady, setGoogleReady] = useState(false);
+  /**
+   * An error from the Google round trip. It comes back in the URL because the
+   * browser was mid-navigation and there was no component left to hand it to.
+   */
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const [slots, setSlots] = useState<[RealityCheck | null, RealityCheck | null]>([null, null]);
   // "Check listing" opens the single-listing result; "Add to comparison" fills a slot.
@@ -52,7 +63,13 @@ export function App() {
    */
   const [pair, setPair] = useState<[RealityCheck | null, RealityCheck | null]>([null, null]);
   const pairFull = pair[0] !== null && pair[1] !== null;
-  const [saved, setSaved] = useState<RealityCheck[]>(loadSaved);
+  /** Exactly one listing selected on Saved: its reality check owns the column. */
+  const lone = pairFull ? null : (pair[0] ?? pair[1]);
+  /**
+   * Empty until an account says otherwise. Saving needs one, so signed out
+   * there is genuinely nothing here rather than a list waiting to be claimed.
+   */
+  const [saved, setSaved] = useState<RealityCheck[]>([]);
   const [tab, setTab] = useState<"check" | "saved">("check");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
@@ -154,6 +171,101 @@ export function App() {
     };
   }, [workAt]);
 
+  /** Whatever they were trying to do before being asked to sign in. */
+  const runIntent = useCallback((intent: Intent) => {
+    if (intent.kind === "open-saved") {
+      setTab("saved");
+      setDetail(null);
+      setComparing(false);
+      return;
+    }
+    setSaved((list) => toggleSaved(list, intent.check));
+  }, []);
+
+  /**
+   * Load the account's saved listings, then finish what they came to do.
+   *
+   * Straight from the server, with nothing merged in: saving requires an
+   * account, so a list in this browser could only be a leftover from someone
+   * else's session, and folding that into whoever signs in next would hand
+   * them another person's saves.
+   *
+   * The waiting intent runs after the list has arrived, so a save is applied
+   * to the account's real list rather than to an empty one about to be
+   * replaced by it.
+   */
+  const adopt = useCallback(
+    async (user: Account) => {
+      setAccount(user);
+      setSaved((await fetchSavedFromServer()) ?? []);
+      const intent = takeIntent(user.email);
+      if (intent) runIntent(intent);
+    },
+    [runIntent],
+  );
+
+  /**
+   * Do this now if they are signed in; otherwise ask them to sign in and do it
+   * when they are. Everything that touches the saved list goes through here,
+   * so there is one answer to "what happens if nobody is signed in".
+   */
+  function withAccount(intent: Intent) {
+    if (account) {
+      runIntent(intent);
+      return;
+    }
+    rememberIntent(intent);
+    setSignIn(true);
+  }
+
+  /**
+   * Who is signed in, asked once. Also picks up the error a sign-in link or the
+   * Google callback leaves in the URL, then takes it back out so a reload does
+   * not replay it.
+   *
+   * Guarded rather than left to the dependency list, because this is not a
+   * repeatable effect: it spends the waiting intent, and running it a second
+   * time -- as StrictMode does in development -- would re-read the saved list
+   * from the server while the save that intent just made was still in flight,
+   * and show the reader a list one shorter than the one they have.
+   */
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const failed = params.get("authError");
+    if (failed) {
+      setAuthError(failed);
+      setSignIn(true);
+      params.delete("authError");
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    }
+
+    void fetchSession().then((session) => {
+      setGoogleReady(session.google);
+      if (session.user) void adopt(session.user);
+    });
+  }, [adopt]);
+
+  /**
+   * Put a check in front of the reader, on whichever screen they are on.
+   *
+   * The board answers with its single-listing page. Saved has no separate
+   * "opened" listing any more -- the right-hand column is whatever is
+   * selected -- so showing something there means selecting just it.
+   */
+  function show(check: RealityCheck) {
+    if (tab === "saved") {
+      setPair([check, null]);
+      return;
+    }
+    setDetail(check);
+    window.scrollTo(0, 0);
+  }
+
   async function score(addr: string, rent: string, target: 0 | 1 | "append" | "detail") {
     setBusy(true);
     setError(null);
@@ -170,8 +282,7 @@ export function App() {
       }
       const check = body as RealityCheck;
       if (target === "detail") {
-        setDetail(check);
-        window.scrollTo(0, 0);
+        show(check);
       } else {
         fillSlot(check, target);
       }
@@ -257,7 +368,7 @@ export function App() {
   /**
    * Bring a stored check's safety pillar up to date.
    *
-   * Saved listings are kept whole in localStorage and reopened rather than
+   * Saved listings are stored whole on the account and reopened rather than
    * rescored, so one checked before the index learned about incident types
    * keeps a safety pillar with no breakdown in it -- and goes on reporting
    * that the index needs rebuilding no matter how many times it is rebuilt.
@@ -298,8 +409,7 @@ export function App() {
       (c): c is RealityCheck => !!c && c.listing.address.trim().toLowerCase() === key,
     );
     if (known) {
-      setDetail(known);
-      window.scrollTo(0, 0);
+      show(known);
       void refreshSafety(known);
       return;
     }
@@ -345,12 +455,37 @@ export function App() {
         </button>
         <button
           className={tab === "saved" ? "navlink on" : "navlink"}
-          onClick={() => { setTab("saved"); setDetail(null); setComparing(false); }}
+          /* Signed out this is an invitation to sign in rather than a tab:
+             there is no list to show, because there is nowhere to have saved
+             anything to. */
+          title={account ? undefined : "Sign in to save listings"}
+          onClick={() => withAccount({ kind: "open-saved" })}
         >
           Saved{saved.length ? ` (${saved.length})` : ""}
         </button>
         <span className="spacer" />
-        <button className="signin" onClick={() => setSignIn(true)}>Sign in</button>
+        {account ? (
+          <AccountMenu
+            account={account}
+            onChanged={setAccount}
+            onSignOut={async () => {
+              await signOut();
+              forgetIntent();
+              setAccount(null);
+              /**
+               * The list goes with the account -- it only ever lived on the
+               * server, so there is nothing to clear here beyond the copy on
+               * screen. Saved is not a place to be signed out on, so the tab
+               * goes back to the board rather than showing an empty column.
+               */
+              setSaved([]);
+              setPair([null, null]);
+              setTab("check");
+            }}
+          />
+        ) : (
+          <button className="signin" onClick={() => setSignIn(true)}>Sign in</button>
+        )}
       </nav>
 
       <div className="page">
@@ -359,32 +494,44 @@ export function App() {
             saved={saved}
             pairFull={pairFull}
             /**
-             * Stay on Saved and open the listing in the right-hand column, so
-             * the ranking is still there to move around in. Opening one listing
-             * is a different question from comparing two, so it takes the
-             * column back from the breakdown.
+             * One click is the whole screen. Selecting a listing fills the
+             * right-hand column with its reality check, selecting a second
+             * turns that into the side-by-side breakdown, and clicking a
+             * selected card again takes it back out -- dropping from two to
+             * one leaves the survivor's reality check on screen.
+             *
+             * Opening and comparing used to be separate gestures, which meant
+             * the column had two owners and a stray click on a card could wipe
+             * a comparison. Now the selection is the only thing that decides
+             * what the column shows.
              */
-            /**
-             * Opening a listing shows its reality check but leaves the pair
-             * alone. Clearing it here meant a stray click on a card wiped both
-             * selections, which read as "unselecting one dropped the other".
-             */
-            onOpen={(c) => {
-              setDetail(c);
-              void refreshSafety(c);
+            onSelect={(c) => {
+              const key = c.listing.address.trim().toLowerCase();
+              const same = (x: RealityCheck | null) =>
+                !!x && x.listing.address.trim().toLowerCase() === key;
+              if (!pair.some(same)) void refreshSafety(c);
+              setPair(([a, b]) => {
+                if (same(a)) return [b, null];
+                if (same(b)) return [a, null];
+                if (!a) return [c, b];
+                if (!b) return [a, c];
+                /**
+                 * Both places taken, and the faded cards are still clickable
+                 * -- so they have to do something. The pair rolls: the older
+                 * listing drops out and the new one is compared against
+                 * whichever was selected most recently.
+                 */
+                return [b, c];
+              });
             }}
-            openKey={
-              pairFull ? null : detail ? detail.listing.address.trim().toLowerCase() : null
-            }
+            isSelected={(c) => {
+              const key = c.listing.address.trim().toLowerCase();
+              return pair.some((p) => !!p && p.listing.address.trim().toLowerCase() === key);
+            }}
             /**
-             * The right-hand column answers whichever question was asked last:
-             * two listings picked shows the breakdown, one opened shows its
-             * reality check, and neither leaves the map.
-             */
-            /**
-             * Two picked shows the breakdown; anything less shows whichever
-             * listing was opened, or the map. Unpicking one therefore leaves
-             * the other selected and simply steps back to the single view.
+             * Two selected shows the breakdown, one shows that listing's
+             * reality check, none leaves the map. The selection never touches
+             * the board's own slots: this pair lives and dies on Saved.
              */
             detail={
               pair[0] && pair[1] ? (
@@ -392,55 +539,35 @@ export function App() {
                   inline
                   a={pair[0]}
                   b={pair[1]}
-                  onOpen={(c) => {
-                    setDetail(c);
-                    void refreshSafety(c);
-                  }}
+                  /** Narrow the selection to this one, and the column with it. */
+                  onOpen={(c) => setPair([c, null])}
                   onRent={applyRent}
                   listings={mapListings}
                   onCheck={(addr) => score(addr, "", "detail")}
                   onAdd={openListing}
                 />
-              ) : detail ? (
+              ) : lone ? (
                 <RealityCheckPage
                   inline
-                  check={detail}
-                  saved={isSaved(saved, detail)}
-                  onToggleSave={() => setSaved((list) => toggleSaved(list, detail))}
-                  onRent={addRent}
+                  check={lone}
+                  saved={isSaved(saved, lone)}
+                  onToggleSave={() => withAccount({ kind: "save", check: lone })}
+                  onRent={(rent) => applyRent(lone, rent)}
                   listings={mapListings}
                   onCheck={(addr) => score(addr, "", "detail")}
                   onAdd={openListing}
                 />
               ) : undefined
             }
-            /**
-             * Picking works both ways, and never touches the board: this pair
-             * lives and dies on the Saved page.
-             */
-            onToggleCompare={(c) => {
+            /** Unsaving drops it from the comparison too -- a listing that is
+                no longer in the list cannot go on owning the column. */
+            onRemove={(c) => {
               const key = c.listing.address.trim().toLowerCase();
               const same = (x: RealityCheck | null) =>
                 !!x && x.listing.address.trim().toLowerCase() === key;
-              setPair(([a, b]) => {
-                if (same(a)) return [b, null];
-                if (same(b)) return [a, null];
-                if (!a) return [c, b];
-                if (!b) return [a, c];
-                /**
-                 * Both taken, and the design still gives the faded cards a
-                 * pick circle -- so they have to do something. The pair rolls:
-                 * the older listing drops out and the new one is compared
-                 * against whichever was picked most recently.
-                 */
-                return [b, c];
-              });
+              setPair(([a, b]) => [same(a) ? null : a, same(b) ? null : b]);
+              setSaved((list) => removeSaved(list, c));
             }}
-            inComparison={(c) => {
-              const key = c.listing.address.trim().toLowerCase();
-              return pair.some((p) => !!p && p.listing.address.trim().toLowerCase() === key);
-            }}
-            onRemove={(c) => setSaved((list) => removeSaved(list, c))}
             onBrowse={() => setTab("check")}
             at={workAt}
             listings={mapListings}
@@ -468,7 +595,7 @@ export function App() {
             check={detail}
             onBack={() => setDetail(null)}
             saved={isSaved(saved, detail)}
-            onToggleSave={() => setSaved((list) => toggleSaved(list, detail))}
+            onToggleSave={() => withAccount({ kind: "save", check: detail })}
             onRent={addRent}
             listings={mapListings}
             onCheck={(addr) => score(addr, "", "detail")}
@@ -585,7 +712,20 @@ export function App() {
         )}
       </div>
 
-      {signIn && <SignIn onClose={() => setSignIn(false)} />}
+      {signIn && (
+        <SignIn
+          onClose={() => {
+            setSignIn(false);
+            setAuthError(null);
+            forgetIntent();
+          }}
+          googleReady={googleReady}
+          initialError={authError}
+          /* So a waiting intent can be matched to the address the link went
+             to, and not finished by someone else on this browser. */
+          onRequested={addressIntent}
+        />
+      )}
 
       {onboarding && (
         <Onboarding

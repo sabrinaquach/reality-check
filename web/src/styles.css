@@ -76,6 +76,80 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 
+/* Signed in, the salmon button is spent -- there is nothing left to press for.
+   The design has no state for this (node 2120:4169 is the modal, and the nav
+   behind it always shows "Sign in"), so the bar spends the least room it can
+   on it: one circle, with the account behind a press. */
+.account { position: relative; display: flex; align-items: center; }
+
+/* 39px matches the Sign in button it replaces, so the bar does not change
+   height when someone signs in. */
+.avatar {
+  position: relative;
+  width: 39px; height: 39px; flex: none;
+  padding: 0; border: 0; border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer; overflow: hidden;
+  display: grid; place-items: center;
+}
+.avatar:hover { background: var(--accent-press); }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-initial {
+  font-family: inherit; font-size: 18px; font-weight: 700; color: var(--ink);
+  /* The glyph sits fractionally high in this face at this size. */
+  line-height: 1; transform: translateY(1px);
+}
+/* Covers the circle while a new picture uploads, so the old one is visibly
+   on its way out rather than simply not changing yet. */
+.avatar-busy {
+  position: absolute; inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* Hangs from the circle's right edge, because the circle is the last thing in
+   the bar and a menu growing rightwards would leave the window. */
+.account-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+  min-width: 200px; padding: 6px;
+  background: var(--card); border-radius: var(--radius-sm);
+  box-shadow: var(--panel-shadow);
+  display: grid;
+}
+.account-who {
+  padding: 8px 10px 10px;
+  font-size: 12px; color: var(--ink-50);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 6px;
+}
+.account-item {
+  padding: 9px 10px; border: 0; border-radius: 6px;
+  background: none; cursor: pointer; text-align: left;
+  font-family: inherit; font-size: 15px; font-weight: 500; color: var(--ink);
+}
+.account-item:hover { background: var(--sunken); }
+
+.avatar-error { font-size: 12px; color: var(--poor); max-width: 24ch; }
+
+/* Off screen but still focusable and still clickable by the button above --
+   `display: none` would take the file input out of the tab order entirely,
+   which is fine here, but this keeps it a real form control. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+.account-email {
+  font-size: 16px; font-weight: 500; color: var(--ink-60);
+  max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.account-out {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink-50);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.account-out:hover { color: var(--ink); }
+
 /* ---------- page ----------
  * Figma node 2118:2789. The 1440 frame runs content from x=102 to x=1338:
  * an 851px left column, 20px gutter, 365px right column. Both columns start
@@ -425,6 +499,8 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   max-height: 92vh; overflow-y: auto;
 }
 .modal-body { width: 387px; max-width: calc(100% - 72px); margin: 0 auto; }
+/* For the states with less in them than the square was drawn around. */
+.modal.centred { display: flex; flex-direction: column; justify-content: center; padding: 40px 0; }
 
 .modal .close {
   position: absolute; top: 11px; right: 11px;
@@ -510,10 +586,51 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   font-family: Inter, Manrope, ui-sans-serif, system-ui, sans-serif;
   font-size: 16px; font-weight: 600; color: var(--ink);
   cursor: pointer;
+  /* It is an <a> so that it can navigate to Google, but it is drawn as a
+     button and must not wear a link's underline. */
+  text-decoration: none;
 }
 .google-btn:hover:not(:disabled) { background: var(--sunken); }
 .google-btn:disabled { opacity: .55; cursor: not-allowed; }
 .google-btn img { width: 30px; height: 30px; }
+
+/* Sits between the fields and the button it belongs to, in the poor red the
+   bands already use -- this screen has no other failure state to confuse it
+   with. */
+.auth-error {
+  margin: 10px 0 0;
+  font-size: 12px; color: var(--poor); text-align: center;
+}
+
+/* The Google button is an <a> because it navigates. Without credentials on the
+   server there is nowhere to navigate to, so it wears the disabled look and
+   drops its href rather than pretending. */
+.google-btn.disabled { opacity: .55; cursor: not-allowed; }
+
+/* The "check your email" half of the modal. It replaces the form rather than
+   sitting under it, so the numbers here are its own. */
+/* The heading sits --sub-gap above its subtitle here as it does on every
+   other screen. Only in this state: the form below keeps the 30px the design
+   leaves between the heading and its first field. */
+.modal.centred h3 { margin-bottom: 0; }
+
+.sent-to, .sent-note { margin: 0; text-align: center; line-height: 1.5; }
+.sent-to { margin-top: var(--sub-gap); font-size: 16px; color: var(--ink-60); }
+/* What they check before going to look for the mail: a wrong address is the
+   likeliest reason nothing arrives. Long ones wrap rather than widening the
+   modal past its 466. */
+.sent-to b { font-weight: 700; color: var(--ink); word-break: break-all; }
+/* Fine print, at the same 12px as the disclaimer under the form: it is a
+   condition on the link rather than part of the sentence above it. */
+.sent-note { margin-top: 8px; font-size: 12px; color: var(--ink-50); }
+.link-again {
+  /* Block, or the auto margins do not centre it: a button is inline-block. */
+  display: block;
+  margin: 22px auto 0; padding: 0; border: 0; background: none; cursor: pointer;
+  font-family: inherit; font-size: 14px; font-weight: 500; color: var(--ink-50);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link-again:hover { color: var(--ink); }
 
 .modal .disclaimer { font-size: 12px; color: var(--ink-50); margin: 20px 0 0; text-align: center; }
 
@@ -702,16 +819,17 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   border: 1px solid transparent;
 }
 
-/* Shaped like a radio because it behaves like one -- it holds this listing in
-   a comparison slot. Filled with the accent when it does. */
+/* Shaped like a radio because it reads like one -- this listing's empty place
+   in the comparison. It only ever appears unselected: a selected card drops it
+   and takes the lane back (see .saved-card.no-pick), so there is no filled
+   state to draw. The card behind it carries the hover, since the circle is a
+   second hit target for the card rather than a control of its own. */
 .saved-pick {
   width: 23px; height: 23px; padding: 0;
   border: 1px solid var(--hairline); border-radius: 50%;
   background: none; cursor: pointer;
 }
-.saved-pick:hover:not(:disabled) { border-color: var(--accent-press); }
-.saved-pick.on { background: var(--accent); border-color: var(--accent); }
-.saved-pick:disabled { opacity: .4; cursor: not-allowed; }
+.saved-card:hover .saved-pick { border-color: var(--accent-press); }
 
 .saved-open {
   display: grid; gap: 3px; justify-items: start; text-align: left;
@@ -766,12 +884,18 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   border-color: var(--hairline);
   box-shadow: none;
 }
-/* Node 2135:5295 drops the pick circle from a selected card and shifts its
-   contents into that lane. The circle is back, because the design has no way
-   to *un*select and this screen needs one: with the circle gone, a chosen pair
-   could only ever be swapped, never broken up. It stays filled with the accent
-   so the card still reads as chosen, and the layout stays put so a card does
-   not jump sideways when you pick it. */
+/* Nodes 2136:7321 and 2135:5295: a selected card drops the pick circle and
+   moves its contents into that lane -- content runs 36px from the left edge
+   and the ring ends 37px from the right, so the card reads as centred rather
+   than indented behind a control that is no longer there.
+   Measured on the 1440 frame: card 102->506, text at 138, ring at 411->469.
+
+   Safe to follow the design here because the card itself unselects, so the
+   circle is not the only way back out of a comparison. */
+.saved-card.no-pick {
+  grid-template-columns: 1fr auto;
+  padding-left: 36px; padding-right: 37px;
+}
 /* With both slots taken, the listings that are not being compared fade out of
    the way. They stay clickable -- picking one still swaps it in. */
 .saved-card.dim { opacity: .4; }
@@ -863,6 +987,78 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 }
 .zone.expanded .zone-pills { top: 20px; left: 20px; }
 .zone.expanded .zone-expand { top: 20px; right: 20px; }
+
+/* ---------- the Saved page's right column ----------
+ * Its own stacking context so the expand control sits above the panel, and
+ * relative so that control can hang off the top-right corner -- in line with
+ * the heading of whichever page is inside, the reality check or the breakdown.
+ */
+.saved-detail { position: relative; min-width: 0; }
+/* Figma 2181:7598 / 2181:7597. The asset is the whole control -- a 39px
+   circle, the same size as the nav's own round controls -- so the button is
+   only a hit area and draws nothing itself. */
+.saved-expand {
+  /* 5px down: the control is 39px and the 36px heading's line box is 49, so
+     this is what puts the two centres on the same line rather than their tops. */
+  position: absolute; top: 5px; right: 0; z-index: 2;
+  width: 39px; height: 39px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+}
+.saved-expand img { width: 39px; height: 39px; display: block; }
+.saved-expand:hover { opacity: .82; }
+
+/* Room for it at the end of the heading line, so it sits beside the score and
+   the heart rather than on top of them. The breakdown's heading has nothing at
+   that end, but gets the same reservation so both panels line up the same way.
+   The gap is 12px rather than the row's own 18px: the heart and the expand are
+   the same round control at the same size, and read as a pair. */
+.saved-detail .rc-head-row { padding-right: 51px; }
+.saved-detail .rc-head-row .circle { margin-right: -6px; }
+.saved-detail .cmp > h1 { padding-right: 51px; }
+
+/* Lifted with position rather than by reparenting, as the map is: the same
+   DOM node survives, so nothing inside is remounted and expanding costs no
+   re-render of the pillars. */
+.saved-detail.expanded {
+  position: fixed; inset: 32px; z-index: 61;
+  padding: 28px 32px;
+  background: var(--page);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  overflow: auto;
+}
+/*
+ * Expanded, the control scrolls away with the title instead of staying pinned
+ * over the corner.
+ *
+ * It was fixed, so it stayed reachable. But the breakdown's header bar sticks
+ * to the top of this panel, and a control floating above that bar has to be
+ * paid for somehow: either the bar stops below it -- leaving a strip where the
+ * pillars scroll past above the addresses -- or it covers the end of the
+ * right-hand listing. Escape and a click outside both still close the panel,
+ * and scrolling back up brings the control with the title.
+ *
+ * 33 + 32: the same heading line and the same content edge as when inline,
+ * measured from this panel's padding box rather than the viewport.
+ */
+.saved-detail.expanded .saved-expand { position: absolute; top: 33px; right: 32px; }
+
+/*
+ * Pinned to the very top of the panel, as it is to the top of the window on
+ * every other screen.
+ *
+ * A scrollport begins inside its container's padding, so a plain top: 0 pins
+ * the bar 28px down and leaves the pillars scrolling past in the strip above
+ * it. The negative top puts the bar's edge on the panel's padding box instead;
+ * the padding-top replaces the 28 it now covers, and the matching negative
+ * margin takes that back out of the normal flow -- it lands in the 28px the
+ * summary above already leaves, so nothing moves when the bar is not stuck.
+ */
+.saved-detail.expanded .cmp-heads {
+  top: -28px;
+  padding-top: 40px;
+  margin-top: -28px;
+}
 
 /* ---------- heatmap legend ---------- */
 .zone-legend {
@@ -1003,20 +1199,40 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 }
 
 /* ---------- filling in a missing rent ---------- */
-.rent-prompt { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+/* Wraps rather than spills: in a two-up comparison there may not be room for
+   the field and the button side by side, and the button dropping to its own
+   line is better than either of them leaving the card. */
+.rent-prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
 /* Narrower inside a two-up comparison card than on the full-width reality
    check, and the button says "Score" rather than "Check cost" for the room. */
 .cmp-card .rent-prompt { margin-top: 12px; }
 .cmp-card .rent-go { padding: 0 14px; }
+/*
+ * 260px where there is room, narrower where there is not.
+ *
+ * It was a flat 260px, which a flex item will not shrink below its content --
+ * and an <input> brings its own ~200px intrinsic width. That floor became the
+ * comparison card's minimum, and the card's the column's, so two listings both
+ * missing a rent pushed the whole breakdown off the side of the page at every
+ * window under about 1440.
+ *
+ * So it grows to 260 from a small basis rather than shrinking down to it: a
+ * flex line wraps before it shrinks, and a 260px basis put the button on its
+ * own row long before the field had given up any width. This way the field
+ * takes what is left beside the button, and the wrap above is only ever
+ * reached on a card too narrow for even 110px of it.
+ */
 .rent-field {
   display: flex; align-items: center; gap: 8px;
-  height: 45px; padding: 0 14px; width: 260px; max-width: 100%;
+  height: 45px; padding: 0 14px;
+  flex: 1 1 110px; max-width: 260px; min-width: 110px;
   border: 1px solid var(--hairline); border-radius: var(--radius-sm);
   background: var(--card);
 }
+.rent-go { flex: none; }
 .rent-field img { width: 20px; height: 20px; opacity: .5; flex: none; }
 .rent-field input {
-  border: 0; outline: 0; background: none; width: 100%;
+  border: 0; outline: 0; background: none; width: 100%; min-width: 0;
   font-family: inherit; font-size: 15px; font-weight: 500; color: var(--ink);
 }
 .rent-field input::placeholder { color: var(--ink-50); }
@@ -1135,7 +1351,25 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    only when a 450px card would no longer fit beside its pair. */
 .cmp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
 
-.cmp-heads { margin-bottom: 34px; }
+/*
+ * The two listings stay on screen while the pillars scroll past them.
+ *
+ * Every card below is a claim about one of these two, and read left or right
+ * is the only thing that says which -- so by the third pillar, with the
+ * addresses gone off the top, the columns are anonymous. Sticky keeps the
+ * question in view while you read the answers.
+ *
+ * The bar needs its own background: the 24px between the two cards is a gap,
+ * not a card, and content would otherwise scroll through it.
+ */
+.cmp-heads {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--page);
+  /* 12 of the original 34 moves above the cards as breathing room for the
+     stuck bar, so the space below them is unchanged. */
+  padding: 12px 0;
+  margin-bottom: 22px;
+}
 .cmp-head {
   position: relative;
   display: flex; align-items: center; justify-content: center; gap: 10px;

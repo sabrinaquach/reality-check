@@ -6,3 +6,6 @@ dist/
 # Never commit keys. spike/.gitignore covers its own; this covers every dir.
 .env
 .env.local
+
+# The accounts database. Real people's email addresses and password hashes.
+web/data/

@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="39" height="39" viewBox="0 0 39 39" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 199">
+<g id="Ellipse 79">
+<circle cx="19.5" cy="19.5" r="19.5" fill="#FBFBFB"/>
+<circle cx="19.5" cy="19.5" r="19" stroke="black" stroke-opacity="0.05"/>
+</g>
+<g id="maximize-2">
+<path id="primary" d="M24 10.5H28.5V15" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="primary_2" d="M15 28.5H10.5V24" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="primary_3" d="M21.75 17.25L28.5 10.5M17.25 21.75L10.5 28.5" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</g>
+</svg>

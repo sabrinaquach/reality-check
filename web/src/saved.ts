@@ -1,30 +1,27 @@
 import type { RealityCheck } from "./types.ts";
+import { pushSavedToServer } from "./auth.ts";
 
 /**
- * Saved listings live in this browser. There is no account system, so this is
- * per-device and per-browser rather than per-person -- clearing site data loses
- * them. Storing the whole check means the Saved tab can reopen a result without
- * paying for the ~8 Google calls a rescore would cost.
+ * Saved listings live on the account, and only on the account.
+ *
+ * They used to live in localStorage, which meant they were per-browser rather
+ * than per-person and vanished with the site data. Now that saving asks for an
+ * account first there is nowhere else for them to be: signed out there is
+ * nothing to save to, and signed in the server is the only copy. Nothing about
+ * a person's list is left in a browser they walk away from.
+ *
+ * Storing the whole check, not just the address, means the Saved tab can
+ * reopen a result without paying for the ~8 Google calls a rescore would cost.
  */
-const KEY = "reality-check.saved";
 
-export function loadSaved(): RealityCheck[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const list = raw ? (JSON.parse(raw) as RealityCheck[]) : [];
-    return Array.isArray(list) ? list : [];
-  } catch {
-    return []; // private window, blocked storage -- start empty
-  }
-}
-
+/**
+ * Send the list as it now stands. A replace rather than a diff: it is a
+ * handful of entries, the client owns their order, and a write that failed is
+ * repaired whole by the next one.
+ */
 export function persistSaved(list: RealityCheck[]) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list));
-  } catch {
-    // Out of quota or storage disabled. The in-memory list still works for
-    // this session; losing it on reload beats breaking the click.
-  }
+  // Fire and forget: the click has already been answered on screen.
+  void pushSavedToServer(list);
 }
 
 /** Address is the identity -- the same place checked twice is one saved entry. */

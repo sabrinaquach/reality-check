@@ -33,4 +33,11 @@ export const icons = {
   check: "/icons/check.svg",
   expandRing: "/icons/expand-ring.svg",
   expand: "/icons/expand.svg",
+  /**
+   * Figma nodes 2181:7598 and 2181:7597. Whole controls rather than glyphs --
+   * each carries its own 39px circle -- so they are drawn at full size on a
+   * bare button, not dropped inside one of the app's own.
+   */
+  panelExpand: "/icons/panel-expand.svg",
+  panelMinimize: "/icons/panel-minimize.svg",
 } as const;

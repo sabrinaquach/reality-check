@@ -16,6 +16,19 @@ import { scoreCost } from "../spike/src/sources/cost.ts";
 import { scoreSafety } from "../spike/src/sources/safety.ts";
 import { affordableNear } from "../spike/src/sources/affordable.ts";
 import type { Priority, RealityCheck } from "../spike/src/types.ts";
+import {
+  clearedSessionCookie,
+  currentUser,
+  googleCallback,
+  googleConfigured,
+  googleStart,
+  publicUser,
+  requestLink,
+  sessionCookie,
+  sessionIdOf,
+  signInWithToken,
+} from "./auth.ts";
+import { deleteSession, getAvatar, replaceSaved, savedFor, setAvatar } from "./store.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const PRIORITIES: Priority[] = ["commute", "safety", "cost"];
@@ -118,17 +131,223 @@ function remember(key: string, value: RealityCheck) {
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!);
 }
 
-function send(res: import("node:http").ServerResponse, status: number, body: unknown) {
+function send(
+  res: import("node:http").ServerResponse,
+  status: number,
+  body: unknown,
+  extra?: Record<string, string>,
+) {
   const json = JSON.stringify(body);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(json),
+    ...extra,
   });
   res.end(json);
 }
 
+/** The sign-in routes are the only ones that navigate rather than answer. */
+function redirect(res: import("node:http").ServerResponse, to: string, extra?: Record<string, string>) {
+  res.writeHead(302, { Location: to, ...extra });
+  res.end();
+}
+
+/**
+ * Read a request body, up to a limit. Returns null past it rather than
+ * buffering something unbounded into this process's memory.
+ */
+async function readBody(
+  req: import("node:http").IncomingMessage,
+  limit: number,
+): Promise<Buffer | null> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    total += (chunk as Buffer).length;
+    if (total > limit) return null;
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * What an upload actually is, read from its first bytes rather than from the
+ * Content-Type the browser claimed.
+ *
+ * This is the check that matters: these bytes get served back out of this
+ * origin later, and a file that says "image/png" while holding markup would be
+ * a script running on the app's own domain. Only these three formats, so SVG
+ * -- which is a document and can carry script -- has no way through.
+ */
+function imageTypeOf(buf: Buffer): "image/png" | "image/jpeg" | "image/webp" | null {
+  if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "image/png";
+  }
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (
+    buf.length > 12 &&
+    buf.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buf.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+async function readJson(req: import("node:http").IncomingMessage): Promise<any> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+
+  /* ---------- accounts ---------- */
+
+  /**
+   * Who is signed in. The client asks once on load, so the nav can show an
+   * account instead of a "Sign in" button without waiting for an action.
+   */
+  if (url.pathname === "/api/me") {
+    const user = currentUser(req);
+    return send(res, 200, { user: user ? publicUser(user) : null, google: googleConfigured() });
+  }
+
+  /**
+   * Ask for a sign-in link. Signing up and signing in are the same request,
+   * because from here they are indistinguishable: an address either owns its
+   * inbox or it does not.
+   */
+  if (url.pathname === "/api/auth/email" && req.method === "POST") {
+    try {
+      const body = await readJson(req);
+      const result = await requestLink(body?.email);
+      if (!result.ok) return send(res, result.status, { error: result.error });
+      /**
+       * The same answer whether or not that address has an account. Anything
+       * else -- a different message, a different delay -- would let a stranger
+       * test addresses against this app one at a time.
+       */
+      return send(res, 200, { sent: true });
+    } catch {
+      return send(res, 400, { error: "Could not read that request." });
+    }
+  }
+
+  /**
+   * Following the link. A navigation, so it answers with a redirect either
+   * way: signed in to the app, or back to it with the reason in the URL.
+   */
+  if (url.pathname === "/api/auth/callback") {
+    const result = signInWithToken(url.searchParams.get("token"));
+    if (!result.ok) return redirect(res, `/?authError=${encodeURIComponent(result.error)}`);
+    return redirect(res, "/", { "Set-Cookie": sessionCookie(result.sessionId) });
+  }
+
+  if (url.pathname === "/api/auth/signout" && req.method === "POST") {
+    deleteSession(sessionIdOf(req));
+    return send(res, 200, { user: null }, { "Set-Cookie": clearedSessionCookie() });
+  }
+
+  /**
+   * Google, as a redirect rather than an embedded script -- see auth.ts. The
+   * button in the modal is a link to this route.
+   */
+  if (url.pathname === "/api/auth/google/start") {
+    if (!googleConfigured()) {
+      return send(res, 503, {
+        error: "Google sign-in isn't configured on this server (GOOGLE_OAUTH_CLIENT_ID).",
+      });
+    }
+    const { url: to, cookie } = googleStart();
+    return redirect(res, to, { "Set-Cookie": cookie });
+  }
+
+  if (url.pathname === "/api/auth/google/callback") {
+    /**
+     * A redirect either way: the browser is mid-navigation, so an error has to
+     * arrive as a page the app can read, not as JSON it would have to render
+     * itself. The modal reopens and shows `authError`.
+     */
+    try {
+      const result = await googleCallback(
+        req,
+        url.searchParams.get("code"),
+        url.searchParams.get("state"),
+      );
+      if (!result.ok) {
+        return redirect(res, `/?authError=${encodeURIComponent(result.error)}`);
+      }
+      return redirect(res, "/", { "Set-Cookie": sessionCookie(result.sessionId) });
+    } catch (e) {
+      console.error("google sign-in failed:", e);
+      return redirect(res, `/?authError=${encodeURIComponent("Google sign-in failed. Try again.")}`);
+    }
+  }
+
+  /**
+   * A profile picture: the account's own, both ways. Nobody else's is
+   * reachable, because in this app nobody else's is ever shown.
+   *
+   * The client resizes and re-encodes to a small square JPEG before sending,
+   * so this ceiling is a backstop against something that skipped the UI rather
+   * than the normal case -- a 256px avatar lands around 30 KB.
+   */
+  if (url.pathname === "/api/avatar") {
+    const user = currentUser(req);
+
+    if (req.method === "GET") {
+      if (!user) return send(res, 401, { error: "Sign in first." });
+      const avatar = getAvatar(user.id);
+      if (!avatar) return send(res, 404, { error: "No picture." });
+      res.writeHead(200, {
+        "Content-Type": avatar.type,
+        "Content-Length": avatar.bytes.length,
+        // Never let a shared cache hold one person's face, and never sniff the
+        // type back out of the bytes.
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+      });
+      return res.end(Buffer.from(avatar.bytes));
+    }
+
+    if (req.method === "PUT") {
+      if (!user) return send(res, 401, { error: "Sign in first." });
+      const body = await readBody(req, 1_000_000);
+      if (!body) return send(res, 413, { error: "That picture is too large." });
+      const type = imageTypeOf(body);
+      if (!type) return send(res, 400, { error: "That doesn't look like a PNG, JPEG, or WebP." });
+      setAvatar(user.id, body, type);
+      return send(res, 200, { user: publicUser(user) });
+    }
+  }
+
+  /* ---------- saved listings, once there is an account to hang them on ---------- */
+
+  if (url.pathname === "/api/saved") {
+    const user = currentUser(req);
+    if (!user) return send(res, 401, { error: "Sign in first." });
+
+    if (req.method === "GET") return send(res, 200, { saved: savedFor(user.id) });
+
+    if (req.method === "PUT") {
+      try {
+        const body = await readJson(req);
+        const list = body?.saved;
+        if (!Array.isArray(list)) return send(res, 400, { error: "A list is required." });
+        // Anything without an address has no identity here and cannot be a row.
+        replaceSaved(
+          user.id,
+          list.filter((c: any) => typeof c?.listing?.address === "string" && c.listing.address.trim()),
+        );
+        return send(res, 200, { saved: savedFor(user.id) });
+      } catch (e) {
+        console.error("saving failed:", e);
+        return send(res, 400, { error: "Could not read that request." });
+      }
+    }
+  }
 
   /**
    * Rental listings. `cachedOnly` is the default on purpose: rendering a page
