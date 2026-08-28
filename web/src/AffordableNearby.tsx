@@ -23,6 +23,7 @@ import { pretty } from "./address.ts";
 export type AffordableArea = {
   /** A real block address standing in for the area. */
   address: string;
+  city: string;
   tract: string;
   rent: number;
   miles: number;
@@ -97,7 +98,7 @@ export function AffordableNearby({
         <>
           <div className="rail" ref={rail.ref}>
             {areas.map((a) => {
-              const full = `${pretty(a.address)}, San Jose`;
+              const full = `${pretty(a.address)}, ${a.city}`;
               return (
                 <div
                   className="spot"

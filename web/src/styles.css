@@ -177,6 +177,17 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .commuting button:hover { opacity: 1; }
 .commuting img { width: 18px; height: 18px; }
 
+/* Which cities the safety pillar covers.
+ *
+ * It follows the thing it qualifies rather than heading it -- under the
+ * neighbourhood rail, under the safety card, under the safety row -- so it
+ * takes the size of a caption instead of a subtitle, and its space above
+ * rather than below. */
+.coverage {
+  font-size: 13px; line-height: 1.45; color: var(--ink-50);
+  margin: 14px 0 0;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 365px;
@@ -427,8 +438,18 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   column-gap: 1rem;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
+/*
+ * ...except before a rail, which needs 22 to look like 16.
+ *
+ * .rail carries margin: -6px so its cards' shadows are not clipped by its own
+ * overflow, and that pulls it up by six. This block is shared with the map,
+ * which has no such margin -- so a flat 22 on both left the map sitting six
+ * further from its heading than every rail on the page. The compensation
+ * belongs to the rail, so it is stated where the rail is.
+ */
+.section-head:has(+ .rail) { margin-bottom: 22px; }
 .section-head .sub {
   grid-column: 1 / -1;
   color: var(--ink-50); font-size: 16px; margin: var(--sub-gap) 0 0;
@@ -449,7 +470,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .carousel-nav .glyph-prev { left: 4px; }
 .carousel-nav .glyph-next { left: 6px; }
 
-.rail { display: flex; gap: 26px; overflow-x: auto; padding: 6px; margin: -6px; scroll-behavior: smooth; scrollbar-width: none; }
+.rail { display: flex; gap: 24px; overflow-x: auto; padding: 6px; margin: -6px; scroll-behavior: smooth; scrollbar-width: none; }
 .rail::-webkit-scrollbar { display: none; }
 
 /* Card geometry is from the design: 264x110, text at 18px in, drag handle 7px
@@ -775,9 +796,9 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .rc-summary { font-size: 16px; font-weight: 400; color: var(--ink); margin: 0 0 32px; }
 
 .rc-section { margin-bottom: 34px; }
-.rc-section h2 { margin-bottom: 22px; }
+.rc-section h2 { margin-bottom: 16px; }
 .rc-section h3 { margin: 0; }
-.rc-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 7px; }
+.rc-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 16px; }
 
 .rc-card {
   position: relative;
@@ -869,18 +890,18 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    heading block and the first card as well as between cards, and those are
    two different distances. */
 .saved-list { display: grid; align-content: start; }
-.saved-head { margin-bottom: 12px; }
+.saved-head { margin-bottom: 16px; }
 .saved-list h1 { margin-bottom: 0; }
-.saved-card + .saved-card { margin-top: 30px; }
+.saved-card + .saved-card { margin-top: 24px; }
 .saved-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 0; }
-.saved-map h2 { margin-bottom: 18px; }
+.saved-map h2 { margin-bottom: 16px; }
 
 /* 404x136 in the design: the pick circle, the text, and the score ring. */
 .saved-card {
   position: relative;
   display: grid; grid-template-columns: 23px 1fr auto;
-  align-items: center; gap: 0 17px;
-  min-height: 136px; padding: 15px 20px 15px 14px;
+  align-items: center; gap: 0 16px;
+  min-height: 136px; padding: 16px;
   background: var(--card); border-radius: var(--radius); box-shadow: var(--card-shadow);
   /* Transparent by default so the open card's border does not resize it. */
   border: 1px solid transparent;
@@ -1477,6 +1498,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 
 .cmp-section { margin-bottom: 34px; }
 .cmp-section h3 { margin-bottom: 0; }
+.cmp-section h2 { margin-bottom: 16px; }
 .cmp-sub { font-size: 16px; font-weight: 400; color: var(--ink-50); margin: var(--sub-gap) 0 16px; }
 
 .cmp-card {
@@ -1591,7 +1613,8 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 
   h1 { font-size: 20px; margin-bottom: 3px; }
   h2 { font-size: 20px; }
-  .commuting { font-size: 13px; margin-bottom: 18px; }
+  .commuting { font-size: 13px; margin-bottom: 10px; }
+  .coverage { font-size: 12px; margin-top: 12px; }
   /* A control of its own beside the sentence, so it is sized for a fingertip
      rather than for the line -- 32px, where the last version was 19. On the
      surface every other icon button in the app wears: #FBFBFB behind a 1px
@@ -1613,7 +1636,8 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 
   .layout { gap: 30px 0; }
   .col { gap: 30px; }
-  .section-head { margin-bottom: 13px; }
+  .section-head { margin-bottom: 16px; }
+  .section-head:has(+ .rail) { margin-bottom: 22px; }
   .section-head .sub { font-size: 13px; }
   /* A rail scrolls under the finger here, so a pair of 28px arrow targets is
      a control for a gesture the reader already has. */
@@ -1683,7 +1707,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    * rather than stopping it at the gutter -- which is what says the row
    * scrolls. The padding puts the gutter back inside the scroller, and the
    * 6px of the desktop rule is still there for the cards' shadows. */
-  .rail { gap: 19px; padding: 6px 16px; margin: -6px -16px; }
+  .rail { gap: 16px; padding: 6px 16px; margin: -6px -16px; }
   .spot { width: min(268px, 68vw); }
   .spot .addr { font-size: 15px; }
 
@@ -1844,6 +1868,8 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    * cards reserve is the pillar icon's, and this card has neither an icon nor
    * a chevron to make room for. */
   .rc-phone .rc-card.tall { min-height: 0; }
+  /* First thing in the card here, with no band chip above it to clear. */
+  .rc-phone .rc-pillar-name:first-child { margin-top: 0; }
   .rc-phone .rc-card.tall > .rc-headline,
   .rc-phone .rc-card.tall > .rc-detail { padding-right: 0; }
   .rc-phone .rc-amenities { grid-template-columns: 1fr; gap: 0; margin-top: 16px; }
@@ -1889,7 +1915,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    */
   .saved { gap: 0; }
   .saved-map { display: none; }
-  .saved-head { margin-bottom: 14px; }
+  .saved-head { margin-bottom: 16px; }
   .saved-sub { font-size: 13px; }
   /* What a tap does, since on a phone nothing on screen demonstrates it. */
   .saved-how { font-size: 13px; color: var(--ink-50); margin: 6px 0 0; }
@@ -1897,19 +1923,39 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   /* 136px was drawn for a 404px column. At 370 the summary wraps a line more,
      so the height is left to the content and the ring comes in a size. */
   .saved-card {
-    min-height: 0; padding: 14px 14px 14px 12px;
-    grid-template-columns: 20px 1fr auto; gap: 0 12px;
+    min-height: 0; padding: 16px;
+    grid-template-columns: 20px 1fr auto; gap: 0 16px;
   }
-  .saved-card + .saved-card { margin-top: 14px; }
+  .saved-card + .saved-card { margin-top: 16px; }
   .saved-pick { width: 20px; height: 20px; }
   .saved-addr { font-size: 15px; }
   .saved-line { max-width: none; }
-  .saved-card .score-ring { width: 46px; height: 46px; }
-  .saved-card .score-ring svg { width: 46px; height: 46px; }
-  .saved-card .ring-pct { font-size: 13px; }
-  .saved-card .score-ring-label { display: none; }
+  /* The ring at its full size with its caption under it, as on the web. It had
+     been cut to 46px with the caption dropped, on the reasoning that a 370px
+     card could not spare the width -- but the card lost its 136px minimum at
+     the same time, so the height was never the constraint, and 58px still
+     leaves the address around 240px. */
   /* Always on: it waits for a hover on the desktop, and a phone has none. */
   .saved-heart { opacity: .55; top: 10px; right: 10px; }
+
+  /* The action for the current selection, parked on the same line the reality
+     check parks its own bar -- above the tab pill, which is about which screen
+     you are on rather than about anything on it. It arrives with the first
+     selection and leaves with the last, so the list is never carrying a
+     control it cannot use. */
+  .saved-bar {
+    position: fixed; z-index: 7;
+    left: 16px; right: 16px;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    height: 52px; padding: 0 20px;
+    background: var(--accent); border: 0; border-radius: var(--pill);
+    box-shadow: var(--panel-shadow);
+    font-family: inherit; font-size: 15px; color: var(--ink);
+    cursor: pointer;
+  }
+  .saved-bar:hover { background: var(--accent-press); }
+  /* Room to scroll the last card clear of it. */
+  .saved-list { padding-bottom: 70px; }
 
   /* ---- the detailed breakdown: nodes 2113:146 and 2113:223 ----
    * The same page the desktop shows, reordered and re-proportioned. What
@@ -2019,7 +2065,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   .cmp-phone .cmp-section { margin-bottom: 26px; }
   .cmp-phone .cmp-section h3 { font-size: 18px; }
   .cmp-phone .cmp-section h2 { font-size: 18px; }
-  .cmp-phone .cmp-sub { font-size: 15px; margin: 2px 0 12px; }
+  .cmp-phone .cmp-sub { font-size: 15px; margin: 2px 0 16px; }
   /* Two columns at 177px each, which is what a 370px page allows. The desktop
      rule collapses these to one below 900px; this puts them back, because the
      whole point of the page is reading across. */

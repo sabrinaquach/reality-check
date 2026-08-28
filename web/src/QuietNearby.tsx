@@ -1,5 +1,6 @@
 import { useRail } from "./useRail.ts";
 import { icons } from "./icons.ts";
+import { Coverage } from "./Coverage.tsx";
 import { beginCardDrag } from "./touchDrag.ts";
 import { pretty } from "./address.ts";
 import type { Band } from "./types.ts";
@@ -11,6 +12,8 @@ export type QuietSpot = {
   score: number;
   band: Band;
   miles: number;
+  /** Supplied by the engine: a block is not an address until it says where. */
+  city: string;
 };
 
 export function QuietNearby({
@@ -19,6 +22,7 @@ export function QuietNearby({
   loading,
   error,
   onCheck,
+  cities,
 }: {
   work: string;
   spots: QuietSpot[] | null;
@@ -30,6 +34,8 @@ export function QuietNearby({
    * get the thing they had already asked for.
    */
   onCheck: (address: string) => void;
+  /** The cities safety covers, named under the rail. */
+  cities: string[];
 }) {
   const rail = useRail(spots?.length ?? 0);
   const has = spots && spots.length > 0;
@@ -61,15 +67,15 @@ export function QuietNearby({
       {spots && spots.length === 0 && (
         <div className="empty">
           <strong>Nothing to show here</strong>
-          No indexed blocks within four miles of {work} — the safety index only covers San Jose
-          police data.
+          No indexed blocks within four miles of {work}. Safety is scored per city, from that
+          city’s own police data.
         </div>
       )}
 
       {has && (
         <div className="rail" ref={rail.ref}>
           {spots.map((s) => {
-            const full = `${pretty(s.address)}, San Jose`;
+            const full = `${pretty(s.address)}, ${s.city}`;
             return (
               <div
                 className="spot"
@@ -102,6 +108,8 @@ export function QuietNearby({
           })}
         </div>
       )}
+
+      <Coverage cities={cities} />
     </section>
   );
 }

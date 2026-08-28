@@ -30,6 +30,7 @@ export function SavedPage({
   isSelected,
   onRemove,
   onBrowse,
+  onOpenSelection,
   detail,
   at,
   listings = [],
@@ -49,6 +50,13 @@ export function SavedPage({
   isSelected: (check: RealityCheck) => boolean;
   onRemove: (check: RealityCheck) => void;
   onBrowse: () => void;
+  /**
+   * Open the page the current selection describes. Passed only on the phone,
+   * where there is no column beside the list for a selection to fill -- so a
+   * selection stays a selection until this is pressed, and the card's own
+   * recessed state is the whole of the feedback until then.
+   */
+  onOpenSelection?: () => void;
   /**
    * What the selection is showing: one listing's reality check, or the
    * side-by-side breakdown of two (Figma node 2135:5355). Rendered in the
@@ -77,6 +85,7 @@ export function SavedPage({
    * for the page it opens -- so the screen has to say so beforehand.
    */
   const mobile = useMobile();
+  const picked = ranked.filter(isSelected).length;
 
   return (
     <div className="saved">
@@ -184,6 +193,16 @@ export function SavedPage({
           })
         )}
       </div>
+
+      {/* Node 2114:851's bargain, on this screen: an action about the pair
+          that waits until there is a pair to act on. One selected opens that
+          listing; two opens the breakdown. Nothing selected and there is
+          nothing for it to say, so it is not there. */}
+      {onOpenSelection && picked > 0 && (
+        <button className="saved-bar" onClick={onOpenSelection}>
+          {picked > 1 ? "Compare listings" : "View reality check"}
+        </button>
+      )}
 
       {/* Opening a listing swaps this column, so the ranking stays on screen and
           the reader can move between listings without losing their place. The

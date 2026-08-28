@@ -5,6 +5,7 @@ import { compare, type PillarPair, type Side } from "./compare.ts";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
 import { ScoreRing } from "./ScoreRing.tsx";
 import { useMobile } from "./useMobile.ts";
+import { Coverage } from "./Coverage.tsx";
 import { CommuteModes, CostBasis, IncidentBreakdown } from "./PillarDetail.tsx";
 import type { Pillar, RealityCheck } from "./types.ts";
 
@@ -177,11 +178,13 @@ function PillarRow({
   names,
   checks,
   onRent,
+  cities,
 }: {
   pair: PillarPair;
   names: [string, string];
   checks: [RealityCheck, RealityCheck];
   onRent?: (check: RealityCheck, rent: number) => Promise<void> | void;
+  cities: string[];
 }) {
   return (
     <section className={`cmp-section cmp-${pair.key}`}>
@@ -199,6 +202,7 @@ function PillarRow({
           />
         ))}
       </div>
+      {pair.key === "safety" && <Coverage cities={cities} />}
     </section>
   );
 }
@@ -213,6 +217,7 @@ export function ComparePage({
   listings = [],
   onCheck,
   onAdd,
+  cities = [],
 }: {
   a: RealityCheck;
   b: RealityCheck;
@@ -227,6 +232,8 @@ export function ComparePage({
   listings?: MapListing[];
   onCheck?: (address: string) => void;
   onAdd?: (address: string) => void;
+  /** The cities safety covers, named under the safety row. */
+  cities?: string[];
 }) {
   /**
    * The phone's version of this page: Figma nodes 2113:146 and 2113:223.
@@ -356,7 +363,7 @@ export function ComparePage({
       )}
 
       {result.pillars.map((pair) => (
-        <PillarRow key={pair.key} pair={pair} names={names} checks={checks} onRent={onRent} />
+        <PillarRow key={pair.key} pair={pair} names={names} checks={checks} onRent={onRent} cities={cities} />
       ))}
 
       <section className="cmp-section">

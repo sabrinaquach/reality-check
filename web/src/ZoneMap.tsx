@@ -10,6 +10,8 @@ type Layer = "commute" | "safety";
 
 type Block = {
   address: string;
+  /** Which city's index this block came from; the label needs it to geocode. */
+  city: string;
   incidents: number;
   score: number;
   band: "good" | "moderate" | "poor";
@@ -859,7 +861,7 @@ export function ZoneMap({
                       title={`Run a reality check on ${pretty(g.lead.address)}`}
                       onClick={() => {
                         setExpanded(false);
-                        onCheck(`${pretty(g.lead.address)}, San Jose`);
+                        onCheck(`${pretty(g.lead.address)}, ${g.lead.city}`);
                       }}
                     >
                       Check

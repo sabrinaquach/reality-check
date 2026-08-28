@@ -5,6 +5,7 @@ import { CommuteModes, CostBasis, IncidentBreakdown } from "./PillarDetail.tsx";
 import { explainCheck } from "./explain.ts";
 import { withoutState } from "./address.ts";
 import { useMobile } from "./useMobile.ts";
+import { Coverage } from "./Coverage.tsx";
 import type { Pillar, RealityCheck } from "./types.ts";
 
 /**
@@ -232,6 +233,7 @@ export function RealityCheckPage({
   onAdd,
   onAddListing,
   slotsFull,
+  cities = [],
 }: {
   check: RealityCheck;
   /**
@@ -259,6 +261,8 @@ export function RealityCheckPage({
    */
   onAddListing?: () => void;
   slotsFull?: boolean;
+  /** The cities safety covers, named under the safety card. */
+  cities?: string[];
 }) {
   const [pricing, setPricing] = useState(false);
   /**
@@ -435,22 +439,27 @@ export function RealityCheckPage({
             ) : (
               <PillarCard pillar={pillar} icon={icon} size={size} title={title} />
             )}
+            {key === "safety" && <Coverage cities={cities} />}
           </section>
         );
       })}
 
+      {/* rc-pillar, like the three above it: the phone folds the heading into
+          the card and hides the one out here. */}
       {amenities && (
-        <section className="rc-section">
+        <section className="rc-section rc-pillar">
           <h3>Nearby amenities</h3>
           <p className="rc-sub">{amenities.basis}</p>
           {amenities.unavailable ? (
             <div className="rc-card out">
               <span className="rc-chip">Not available</span>
+              <span className="rc-pillar-name">Nearby amenities</span>
               <p className="rc-headline">No data</p>
               <p className="rc-detail">{amenities.unavailable}</p>
             </div>
           ) : (
             <div className="rc-card tall">
+              <span className="rc-pillar-name">Nearby amenities</span>
               <p className="rc-headline">
                 {items.filter((i) => i.miles <= 0.5).length} amenities within 0.5 mi
               </p>

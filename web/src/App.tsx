@@ -46,6 +46,8 @@ export function App() {
   const [account, setAccount] = useState<Account | null>(null);
   /** Whether this server has Google credentials at all -- the modal needs to know. */
   const [googleReady, setGoogleReady] = useState(false);
+  /** Which cities safety covers, for the note under the heading. */
+  const [cities, setCities] = useState<string[]>([]);
   /**
    * An error from the Google round trip. It comes back in the URL because the
    * browser was mid-navigation and there was no component left to hand it to.
@@ -66,6 +68,8 @@ export function App() {
    * slots belong to the board.
    */
   const [pair, setPair] = useState<[RealityCheck | null, RealityCheck | null]>([null, null]);
+  /** Whether Saved's selection has been opened into its own page. Phone only. */
+  const [savedOpen, setSavedOpen] = useState(false);
   const pairFull = pair[0] !== null && pair[1] !== null;
   /** Exactly one listing selected on Saved: its reality check owns the column. */
   const lone = pairFull ? null : (pair[0] ?? pair[1]);
@@ -276,6 +280,7 @@ export function App() {
 
     void fetchSession().then((session) => {
       setGoogleReady(session.google);
+      setCities(session.cities ?? []);
       if (session.user) void adopt(session.user);
     });
   }, [adopt]);
@@ -493,8 +498,14 @@ export function App() {
    * a column that is not there. One selected is that listing's reality check,
    * two is the breakdown -- the same two things the desktop column shows,
    * given the whole screen because there is nothing to share it with.
+   *
+   * Asked for, though, rather than taken: selecting a card selects it and
+   * nothing more, exactly as on the desktop, and the bar at the foot of the
+   * list is what opens the page. A tap that navigated meant a second listing
+   * could never be picked -- the first one had already left the screen.
    */
-  const savedOnPhone = mobile && tab === "saved" && (lone !== null || pairFull);
+  const savedOnPhone =
+    mobile && tab === "saved" && savedOpen && (lone !== null || pairFull);
 
   const phoneDetail =
     mobile &&
@@ -550,11 +561,12 @@ export function App() {
       <div className="page">
         {savedOnPhone && pairFull && pair[0] && pair[1] ? (
           <ComparePage
+            cities={cities}
             a={pair[0]}
             b={pair[1]}
-            /* Back to the ranked list, with nothing selected -- the selection
-               and the page it opened are the same thing here. */
-            onBack={() => setPair([null, null])}
+            /* Back to the ranked list with the pair still selected, so the
+               bar is there to come straight back in. */
+            onBack={() => setSavedOpen(false)}
             onOpen={(c) => setPair([c, null])}
             onRent={applyRent}
             listings={mapListings}
@@ -563,8 +575,9 @@ export function App() {
           />
         ) : savedOnPhone && lone ? (
           <RealityCheckPage
+            cities={cities}
             check={lone}
-            onBack={() => setPair([null, null])}
+            onBack={() => setSavedOpen(false)}
             saved={isSaved(saved, lone)}
             onToggleSave={() => withAccount({ kind: "save", check: lone })}
             onRent={(rent) => applyRent(lone, rent)}
@@ -619,6 +632,7 @@ export function App() {
             detail={
               mobile ? undefined : pair[0] && pair[1] ? (
                 <ComparePage
+            cities={cities}
                   inline
                   a={pair[0]}
                   b={pair[1]}
@@ -631,6 +645,7 @@ export function App() {
                 />
               ) : lone ? (
                 <RealityCheckPage
+            cities={cities}
                   inline
                   check={lone}
                   saved={isSaved(saved, lone)}
@@ -652,6 +667,7 @@ export function App() {
               setSaved((list) => removeSaved(list, c));
             }}
             onBrowse={() => setTab("check")}
+            onOpenSelection={mobile ? () => setSavedOpen(true) : undefined}
             at={workAt}
             listings={mapListings}
             onCheck={(addr) => score(addr, "", "detail")}
@@ -659,6 +675,7 @@ export function App() {
           />
         ) : comparing && slots[0] && slots[1] ? (
           <ComparePage
+            cities={cities}
             a={slots[0]}
             b={slots[1]}
             onRent={applyRent}
@@ -675,6 +692,7 @@ export function App() {
           />
         ) : detail ? (
           <RealityCheckPage
+            cities={cities}
             check={detail}
             onBack={() => setDetail(null)}
             saved={isSaved(saved, detail)}
@@ -777,6 +795,7 @@ export function App() {
             />
 
             <QuietNearby
+              cities={cities}
               work={work}
               spots={spots}
               loading={spotsLoading}
