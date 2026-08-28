@@ -1,0 +1,39 @@
+# Reality Check.
+#
+# One machine, deliberately. Accounts live in SQLite on the volume below, and
+# SQLite has a single writer -- two machines would each mount their own disk
+# and disagree about who is signed in. Scale up only after the store moves to
+# a database that can be shared.
+app = "realitycheck"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+  # Everything the app writes goes to the volume. The source tree is read-only
+  # and replaced on every deploy, so anything left beside it would vanish.
+  DB_FILE = "/data/app.db"
+  TRACTS_CACHE = "/data/tracts-cache.json"
+  # Not just a cache: the monthly RentCast cap is enforced from a counter kept
+  # inside this file, so a file that resets is a budget that resets with it.
+  RENTCAST_CACHE = "/data/rentcast-cache.json"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  # Suspend rather than stop: it resumes without paying for a cold Node start,
+  # and the volume stays attached either way.
+  auto_stop_machines = "suspend"
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[mounts]
+  source = "reality_check_data"
+  destination = "/data"

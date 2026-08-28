@@ -6,10 +6,11 @@
   "description": "Reality Check web UI. Vite + React over the scoring engine in ../spike.",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:api": "node --watch --env-file-if-exists=../spike/.env --env-file-if-exists=.env --experimental-strip-types --no-warnings server.ts",
+    "dev:api": "node --env-file-if-exists=../spike/.env --env-file-if-exists=.env --experimental-strip-types --no-warnings server.ts",
     "dev:web": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "mapbox-gl": "^3.29.0",
@@ -17,6 +18,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/node": "^26.4.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",

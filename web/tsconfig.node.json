@@ -1,0 +1,22 @@
+{
+  // The half of the codebase the other tsconfig never saw.
+  //
+  // tsconfig.json includes only "src", so server.ts, auth.ts, store.ts and the
+  // whole scoring engine went unchecked -- which is how a call to loadIndex()
+  // with no argument reached a running server. Same options, minus the DOM and
+  // plus Node's.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["server.ts", "auth.ts", "store.ts", "../spike/src"]
+}

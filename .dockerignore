@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+.DS_Store
+
+# Keys never enter the image. They arrive as Fly secrets at runtime, except
+# the Mapbox public token, which is a build argument -- see the Dockerfile.
+**/.env
+**/.env.local
+
+# The accounts database: real addresses. It belongs on the volume, and a copy
+# from a laptop must never be baked into an image.
+web/data
