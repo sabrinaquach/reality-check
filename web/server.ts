@@ -7,6 +7,9 @@
  *   npm run dev:api    # just this, on :8787
  */
 import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { extname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { geocode } from "../spike/src/geocode.ts";
 import { quietNearby, scoredBlocksNear } from "../spike/src/nearby.ts";
 import { rentalsNear } from "../spike/src/sources/listings.ts";
@@ -16,6 +19,7 @@ import { scoreCost } from "../spike/src/sources/cost.ts";
 import { scoreSafety } from "../spike/src/sources/safety.ts";
 import { affordableNear } from "../spike/src/sources/affordable.ts";
 import type { Priority, RealityCheck } from "../spike/src/types.ts";
+import { CITIES } from "../spike/src/cities.ts";
 import {
   clearedSessionCookie,
   currentUser,
@@ -67,13 +71,32 @@ const MODES_TTL_MS = 60 * 60 * 1000;
 const modesCache = new Map<string, { at: number; value: ModeTime[] }>();
 
 /**
- * The safety index only covers San Jose, so there is little point offering
- * addresses far outside it. 50km is the widest circle the API accepts and
- * reaches Cupertino, Sunnyvale, Fremont and the rest of the South Bay.
+ * Suggestions are kept to the area the safety index can speak for, and the box
+ * is derived from CITIES rather than written down -- so adding a city widens
+ * the suggestions on its own instead of being a second thing to remember.
+ *
+ * A rectangle, not a circle, and that is forced: San Francisco is 42 miles
+ * from San Jose, and 50km is the widest circle the Places API accepts. One
+ * circle cannot hold both.
  */
-const NEAR_SAN_JOSE = {
-  circle: { center: { latitude: 37.3382, longitude: -121.8863 }, radius: 50_000 },
-};
+const COVERED = (() => {
+  const MILES_PER_DEG_LAT = 69;
+  let south = 90, north = -90, west = 180, east = -180;
+  for (const c of CITIES) {
+    const dLat = c.radiusMiles / MILES_PER_DEG_LAT;
+    const dLng = dLat / Math.max(0.2, Math.cos((c.centre.lat * Math.PI) / 180));
+    south = Math.min(south, c.centre.lat - dLat);
+    north = Math.max(north, c.centre.lat + dLat);
+    west = Math.min(west, c.centre.lng - dLng);
+    east = Math.max(east, c.centre.lng + dLng);
+  }
+  return {
+    rectangle: {
+      low: { latitude: south, longitude: west },
+      high: { latitude: north, longitude: east },
+    },
+  };
+})();
 
 async function suggest(input: string, sessionToken: string): Promise<Suggestion[]> {
   const key = process.env.GOOGLE_MAPS_API_KEY;
@@ -90,7 +113,7 @@ async function suggest(input: string, sessionToken: string): Promise<Suggestion[
       input,
       sessionToken,
       includedRegionCodes: ["us"],
-      locationRestriction: NEAR_SAN_JOSE,
+      locationRestriction: COVERED,
     }),
     signal: AbortSignal.timeout(8_000),
   });
@@ -194,6 +217,64 @@ function imageTypeOf(buf: Buffer): "image/png" | "image/jpeg" | "image/webp" | n
   return null;
 }
 
+/* ---------- the built client ----------
+ *
+ * In development Vite serves the page and proxies /api here, so none of this
+ * runs. In a deployment there is no Vite: this process is the whole app, and
+ * serving both halves from one origin is what keeps the session cookie simple
+ * -- SameSite=Lax works because the browser only ever sees one host.
+ */
+const CLIENT_DIR = fileURLToPath(new URL("./dist", import.meta.url));
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".map": "application/json; charset=utf-8",
+};
+
+async function serveClient(pathname: string, res: import("node:http").ServerResponse) {
+  const wanted = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const file = resolve(CLIENT_DIR, wanted);
+  // Refuse anything that resolves outside dist, whatever the request said.
+  if (file !== CLIENT_DIR && !file.startsWith(CLIENT_DIR + sep)) {
+    return send(res, 403, { error: "Forbidden" });
+  }
+
+  let body: Buffer;
+  let path = file;
+  try {
+    body = await readFile(path);
+  } catch {
+    // Not a file on disk. The client owns its own paths, so hand it the page
+    // and let it decide -- and a genuinely missing asset lands here too, which
+    // is why this is the only place a 404 can still come from.
+    path = resolve(CLIENT_DIR, "index.html");
+    try {
+      body = await readFile(path);
+    } catch {
+      return send(res, 404, { error: "Not found" });
+    }
+  }
+
+  res.setHeader("Content-Type", MIME[extname(path)] ?? "application/octet-stream");
+  // Vite fingerprints everything under /assets, so those can be kept forever.
+  // The page that names them must never be, or a deploy would go unnoticed.
+  res.setHeader(
+    "Cache-Control",
+    path.includes(`${sep}assets${sep}`) ? "public, max-age=31536000, immutable" : "no-cache",
+  );
+  res.writeHead(200);
+  res.end(body);
+}
+
 async function readJson(req: import("node:http").IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -211,7 +292,19 @@ const server = createServer(async (req, res) => {
    */
   if (url.pathname === "/api/me") {
     const user = currentUser(req);
-    return send(res, 200, { user: user ? publicUser(user) : null, google: googleConfigured() });
+    /*
+     * The covered cities ride along here rather than on an endpoint of their
+     * own. This is the one call the client makes on load, and a second round
+     * trip for eight strings would cost more than it explains -- and the list
+     * has to come from the server either way, because cities.ts is the single
+     * source of truth and a copy in the client would drift the first time a
+     * city was added.
+     */
+    return send(res, 200, {
+      user: user ? publicUser(user) : null,
+      google: googleConfigured(),
+      cities: CITIES.map((c) => c.name),
+    });
   }
 
   /**
@@ -484,7 +577,7 @@ const server = createServer(async (req, res) => {
       // address there would get.
       const blocks = await scoredBlocksNear({ lat, lng }, radius);
       if (blocks === null) {
-        return send(res, 503, { error: "No block index. Run `npm run build-index` in ../spike." });
+        return send(res, 503, { error: "No safety index for this area." });
       }
       return send(res, 200, {
         type: "FeatureCollection",
@@ -497,6 +590,9 @@ const server = createServer(async (req, res) => {
             weight: b.weight,
             score: b.score,
             band: b.band,
+            // So the map can build an address out of a block label without
+            // knowing which city it is looking at.
+            city: b.city,
           },
         })),
       });
@@ -537,7 +633,7 @@ const server = createServer(async (req, res) => {
       if (!at) return send(res, 422, { error: `Could not find "${near}".` });
       const spots = await quietNearby(at);
       if (spots === null) {
-        return send(res, 503, { error: "No block index. Run `npm run build-index` in ../spike." });
+        return send(res, 503, { error: "No safety index for this area." });
       }
       return send(res, 200, { at, spots });
     } catch (e) {
@@ -545,6 +641,9 @@ const server = createServer(async (req, res) => {
       return send(res, 500, { error: (e as Error).message });
     }
   }
+
+  // Everything that is not the API is the client.
+  if (!url.pathname.startsWith("/api/")) return serveClient(url.pathname, res);
 
   if (url.pathname !== "/api/score") return send(res, 404, { error: "Not found" });
 

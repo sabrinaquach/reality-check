@@ -8,7 +8,9 @@
     "score": "node --env-file-if-exists=.env --experimental-strip-types --no-warnings src/index.ts",
     "rebaseline": "node --experimental-strip-types --no-warnings src/buildIndex.ts --rebaseline",
     "build-index": "node --experimental-strip-types --no-warnings src/buildIndex.ts",
-    "check": "node --experimental-strip-types --no-warnings src/selftest.ts"
+    "check": "node --experimental-strip-types --no-warnings src/selftest.ts",
+    "build-sf": "node --experimental-strip-types --no-warnings src/buildSanFrancisco.ts",
+    "build-city": "node --experimental-strip-types --no-warnings src/buildCity.ts"
   },
   "engines": {
     "node": ">=22.6"

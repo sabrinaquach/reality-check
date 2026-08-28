@@ -23,7 +23,15 @@ const MONTHLY_CAP = Number(process.env.RENTCAST_MONTHLY_CAP ?? 40);
 /** Listings move slowly; a stale one beats spending a request. */
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-const STORE = new URL("../../data/rentcast-cache.json", import.meta.url);
+/**
+ * Beside the source in development; on the mounted disk in a deployment, where
+ * the source tree is read-only and replaced on every deploy.
+ *
+ * This one is not only a cache. MONTHLY_CAP is enforced from a counter kept
+ * inside it, so a file that resets is a budget that resets with it.
+ */
+const STORE: string | URL =
+  process.env.RENTCAST_CACHE ?? new URL("../../data/rentcast-cache.json", import.meta.url);
 
 export type Listing = {
   address: string;

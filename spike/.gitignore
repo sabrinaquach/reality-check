@@ -1,5 +1,8 @@
 node_modules/
 .env
-data/blocks.json
+# The safety indexes: derived data, ~18MB, one per city and rebuilt by the
+# builders in src/. They travel to the server with `fly deploy`, which uploads
+# the working directory, so they do not need to be in the repo.
+data/blocks*.json
 data/rentcast-cache.json
 data/tracts-cache.json

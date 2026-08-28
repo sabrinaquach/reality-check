@@ -41,6 +41,13 @@ export type Session = {
   user: Account | null;
   /** Whether this server has Google credentials configured at all. */
   google: boolean;
+  /**
+   * The cities the safety pillar can answer for, named by the server.
+   *
+   * Not a constant in the client: cities.ts is where they are declared, and a
+   * second copy here would be wrong the first time one was added.
+   */
+  cities: string[];
 };
 
 async function json(res: Response) {
@@ -55,7 +62,7 @@ export async function fetchSession(): Promise<Session> {
   } catch {
     // The API being down is not the same as being signed out, but there is
     // nothing to sign into either way, and the app works without an account.
-    return { user: null, google: false };
+    return { user: null, google: false, cities: [] };
   }
 }
 

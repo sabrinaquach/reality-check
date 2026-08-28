@@ -13,7 +13,7 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { classify, groupOf, GROUPS, WEIGHTS, type Block, type BlockIndex } from "./sources/safety.ts";
-import { milesBetween } from "./geocode.ts";
+import { baseline, packGroups, RADIUS_MILES } from "./indexKit.ts";
 
 const CKAN = "https://data.sanjoseca.gov/api/3/action";
 const RESOURCES: Record<number, string> = {
@@ -24,8 +24,6 @@ const RESOURCES: Record<number, string> = {
 
 /** Calls where nothing was confirmed to have happened. */
 const DEAD_DISPOS = ["Unfounded event", "Canceled", "Gone on Arrival/unable to locate"];
-
-const RADIUS_MILES = 0.4;
 
 function arg(name: string, fallback: string) {
   const i = process.argv.indexOf(`--${name}`);
@@ -143,43 +141,6 @@ async function fetchBreakdown(resource: string): Promise<Map<string, Map<string,
   }
   console.log("done");
   return out;
-}
-
-/** Group counts for one block, as the compact [index, count] pairs Block.g holds. */
-function packGroups(counts: Map<string, number> | undefined, labels: string[]): [number, number][] {
-  if (!counts) return [];
-  return [...counts]
-    .map(([label, n]) => [labels.indexOf(label), n] as [number, number])
-    .filter(([i]) => i >= 0)
-    .sort((a, b) => b[1] - a[1]);
-}
-
-/**
- * Sample real blocks to learn what a "normal" neighbourhood total looks like,
- * and how heavy the worst one gets.
- *
- * Sampling at blocks skews a little harsh -- these are the busiest blocks in
- * the city, so their surroundings are busier than a random address. Gridding
- * the bounding box instead was tried and measured worse: San Jose's box is full
- * of hillside and industrial land nobody rents in, which drags the median to
- * zero and pushes Almaden Valley -- genuinely one of the quietest parts of the
- * city -- down to 41. Indexing all ~26k blocks rather than the top 4k is the
- * real fix; until then blocks are the closest thing to a lived-in sample.
- */
-function baseline(blocks: Block[]): { deciles: number[]; tailMax: number; sampled: number } {
-  const sample = blocks.length > 400
-    ? blocks.filter((_, i) => i % Math.floor(blocks.length / 400) === 0).slice(0, 400)
-    : blocks;
-  const totals = sample.map((origin) => {
-    let w = 0;
-    for (const b of blocks) if (milesBetween(origin, b) <= RADIUS_MILES) w += b.weight;
-    return w;
-  }).sort((a, b) => a - b);
-  return {
-    deciles: Array.from({ length: 9 }, (_, i) => totals[Math.floor((totals.length * (i + 1)) / 10)] ?? 0),
-    tailMax: totals[totals.length - 1] ?? 0,
-    sampled: totals.length,
-  };
 }
 
 const INDEX_PATH = new URL("../data/blocks.json", import.meta.url);

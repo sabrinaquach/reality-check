@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { milesBetween } from "../geocode.ts";
 import { tractAt } from "./cost.ts";
 import { loadIndex } from "./safety.ts";
+import { cityAt } from "../cities.ts";
 import type { LatLng } from "../types.ts";
 
 /**
@@ -33,7 +34,9 @@ const TTL_MS = 30 * 24 * 60 * 60 * 1000;
  *  serving rows that are missing the newer fields. */
 const CACHE_VERSION = 2;
 
-const STORE = new URL("../../data/tracts-cache.json", import.meta.url);
+/** Beside the source in development, on the mounted disk in a deployment. */
+const STORE: string | URL =
+  process.env.TRACTS_CACHE ?? new URL("../../data/tracts-cache.json", import.meta.url);
 
 export type AffordableArea = {
   /**
@@ -45,6 +48,9 @@ export type AffordableArea = {
    * rather than being for rent itself.
    */
   address: string;
+
+  /** Which city that block address is in, so the UI can compose it. */
+  city: string;
   /** The Census name, e.g. "5032.21". Provenance, not a place name. */
   tract: string;
   /** Median contract rent for the tract, dollars a month. */
@@ -221,7 +227,19 @@ export async function affordableNear(
    * rather than shown: the safety index only covers San Jose, and a card that
    * cannot be opened would be worse than one that is missing.
    */
-  const index = await loadIndex();
+  /*
+   * The safety index this borrows an address from is per-city now, so it has
+   * to say which. Outside every covered city there is none -- and the areas
+   * are dropped rather than shown, because a tract is not somewhere you can
+   * rent and the block address is the only checkable thing about it.
+   */
+  /*
+   * Same bargain as the quiet rail: an area is only worth showing if it comes
+   * with a real address to check, so a city whose blocks are named by
+   * coordinate contributes none.
+   */
+  const city = cityAt(at);
+  const index = city?.labelled ? await loadIndex(city) : null;
   const NEAREST_MILES = 1.2;
   const areas: AffordableArea[] = [];
   for (const a of sorted) {
@@ -235,6 +253,7 @@ export async function affordableNear(
     if (!best || best.d > NEAREST_MILES) continue;
     areas.push({
       address: best.address,
+      city: city!.name,
       tract: a.tract,
       rent: a.rent,
       miles: a.miles,

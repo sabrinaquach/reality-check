@@ -2,6 +2,7 @@ import { bandFor } from "../bands.ts";
 import { milesBetween } from "../geocode.ts";
 import type { IncidentGroup, LatLng, Pillar } from "../types.ts";
 import { readFile, stat } from "node:fs/promises";
+import { cityAt, cityNames, type City } from "../cities.ts";
 
 /**
  * SJPD publishes CALLS FOR SERVICE, not confirmed crimes, and the top call
@@ -127,26 +128,92 @@ export type BlockIndex = {
  * re-run a build that had already worked. A stat is cheap; a stale index that
  * lies about its own contents is not.
  */
-let cached: { mtimeMs: number; index: BlockIndex } | null = null;
+const cached = new Map<string, { mtimeMs: number; index: BlockIndex }>();
 
-export async function loadIndex(path = new URL("../../data/blocks.json", import.meta.url)) {
+/** The index for one city, or null when it has not been built yet. */
+export async function loadIndex(city: City): Promise<BlockIndex | null> {
   try {
-    const { mtimeMs } = await stat(path);
-    if (cached?.mtimeMs === mtimeMs) return cached.index;
-    const index = JSON.parse(await readFile(path, "utf8")) as BlockIndex;
-    cached = { mtimeMs, index };
+    const { mtimeMs } = await stat(city.index);
+    const hit = cached.get(city.id);
+    if (hit?.mtimeMs === mtimeMs) return hit.index;
+    const index = JSON.parse(await readFile(city.index, "utf8")) as BlockIndex;
+    cached.set(city.id, { mtimeMs, index });
     return index;
   } catch {
     return null;
   }
 }
 
-/** Weighted incident total within `radius` miles of a point. */
-export function localWeight(index: BlockIndex, at: LatLng, radius: number) {
+/**
+ * A coarse spatial grid over an index, built once and thrown away with it.
+ *
+ * Everything here used to walk every block in the city on every question, and
+ * for one city of 3,194 blocks that was free. It stopped being free at eight:
+ * quietNearby asks localWeight about each of thousands of candidate blocks, so
+ * a full scan per candidate is quadratic, and Chicago's 27,410 blocks turned
+ * that into hundreds of millions of trig calls -- enough to take a shared vCPU
+ * down and have the host restart it.
+ *
+ * Cells are 0.02 degrees, about 1.4 miles of latitude, so the 0.4-mile scoring
+ * radius touches four cells and the 4-mile rail search touches around fifty.
+ *
+ * A WeakMap keyed on the index object, so a rebuilt or evicted index takes its
+ * grid with it and there is nothing to invalidate by hand.
+ */
+const CELL_DEG = 0.02;
+const grids = new WeakMap<BlockIndex, Map<string, Block[]>>();
+
+function gridFor(index: BlockIndex): Map<string, Block[]> {
+  const had = grids.get(index);
+  if (had) return had;
+  const grid = new Map<string, Block[]>();
+  for (const b of index.blocks) {
+    const key = `${Math.floor(b.lat / CELL_DEG)},${Math.floor(b.lng / CELL_DEG)}`;
+    const cell = grid.get(key);
+    if (cell) cell.push(b);
+    else grid.set(key, [b]);
+  }
+  grids.set(index, grid);
+  return grid;
+}
+
+/** Blocks within `radius` miles of a point, without touching the rest of the city. */
+export function blocksWithin(index: BlockIndex, at: LatLng, radius: number): Block[] {
+  const grid = gridFor(index);
+  const dLat = radius / 69;
+  // Longitude degrees shrink towards the poles; the clamp keeps this finite.
+  const dLng = dLat / Math.max(0.2, Math.cos((at.lat * Math.PI) / 180));
+
+  const out: Block[] = [];
+  const yMin = Math.floor((at.lat - dLat) / CELL_DEG);
+  const yMax = Math.floor((at.lat + dLat) / CELL_DEG);
+  const xMin = Math.floor((at.lng - dLng) / CELL_DEG);
+  const xMax = Math.floor((at.lng + dLng) / CELL_DEG);
+  for (let y = yMin; y <= yMax; y++) {
+    for (let x = xMin; x <= xMax; x++) {
+      const cell = grid.get(`${y},${x}`);
+      if (!cell) continue;
+      // The cells are square and the radius is round, so the corners still
+      // have to be measured properly.
+      for (const b of cell) if (milesBetween(at, b) <= radius) out.push(b);
+    }
+  }
+  return out;
+}
+
+/**
+ * Weighted incident total within `radius` miles of a point.
+ *
+ * `nearest` answers a different question -- is this address covered at all --
+ * so it looks out to `reach`, which the caller sets to the coverage limit.
+ * Without that a point with nothing in its 0.4 miles would report Infinity and
+ * read as out of coverage while standing in the middle of the city.
+ */
+export function localWeight(index: BlockIndex, at: LatLng, radius: number, reach = radius) {
   let weight = 0;
   let incidents = 0;
   let nearest = Infinity;
-  for (const b of index.blocks) {
+  for (const b of blocksWithin(index, at, Math.max(radius, reach))) {
     const d = milesBetween(at, b);
     if (d < nearest) nearest = d;
     if (d <= radius) {
@@ -179,8 +246,8 @@ export function groupsNear(
 
   const totals = new Map<string, number>();
   let all = 0;
-  for (const b of index.blocks) {
-    if (!b.g?.length || milesBetween(at, b) > radius) continue;
+  for (const b of blocksWithin(index, at, radius)) {
+    if (!b.g?.length) continue;
     for (const [gi, n] of b.g) {
       const label = labels[gi];
       if (!label) continue;
@@ -197,10 +264,14 @@ export function groupsNear(
 }
 
 /**
- * The index only covers SJPD's jurisdiction. An address in Palo Alto would
- * otherwise find zero incidents nearby and score a perfect 100 -- silence
- * from a source that never listened. In-city addresses sit within a mile of
- * an indexed block; anything past two miles is out of coverage, not calm.
+ * Each index covers one police department's jurisdiction. An address in Palo
+ * Alto would otherwise find zero incidents nearby and score a perfect 100 --
+ * silence from a source that never listened. In-city addresses sit within a
+ * mile of an indexed block; anything past two miles is out of coverage, not
+ * calm.
+ *
+ * This is the real coverage test. City.radiusMiles only decides which index is
+ * worth opening; this decides whether the answer in it means anything.
  */
 const COVERAGE_MILES = 2;
 
@@ -233,31 +304,48 @@ export function percentileOf(weight: number, deciles: number[], tailMax?: number
 }
 
 export async function scoreSafety(at: LatLng): Promise<Pillar> {
-  const index = await loadIndex();
+  /*
+   * Which city's index answers for this point. Nothing else in the scoring
+   * depends on the answer -- a block is ranked against its own city's baseline
+   * either way -- but the words around the number do, and a reader deserves to
+   * know whether they are being told about calls for service or filed reports.
+   */
+  const city = cityAt(at);
+  const index = city ? await loadIndex(city) : null;
   const base: Pillar = {
     key: "safety",
     score: 0,
     band: "moderate",
     headline: "",
     detail: "",
-    basis: "Based on SJPD calls for service",
+    basis: city?.basis ?? "Based on local police data",
   };
+
+  if (!city) {
+    return {
+      ...base,
+      unavailable: `No police data for this area. Covered: ${cityNames().join(", ")}.`,
+      headline: "Unavailable",
+      detail: `Safety is scored per city, and this address is outside the ${cityNames().length} we have data for.`,
+    };
+  }
 
   if (!index) {
     return {
       ...base,
-      unavailable: "No block index. Run `npm run build-index` first.",
+      unavailable: `No block index for ${city.name}. Run the builder for it first.`,
       headline: "Unavailable",
       detail: "Safety data has not been indexed yet.",
     };
   }
 
-  const { weight, incidents, nearest } = localWeight(index, at, index.radiusMiles);
+  // Reach out to the coverage limit, so "is this city at all" is answerable.
+  const { weight, incidents, nearest } = localWeight(index, at, index.radiusMiles, COVERAGE_MILES);
 
   if (nearest > COVERAGE_MILES) {
     return {
       ...base,
-      unavailable: "Outside the San Jose police data area.",
+      unavailable: `Outside the ${city.name} police data area.`,
       headline: "Unavailable",
       detail: `Nearest indexed block is ${nearest.toFixed(1)} mi away.`,
     };
@@ -268,12 +356,19 @@ export async function scoreSafety(at: LatLng): Promise<Pillar> {
   const score = Math.round(100 - percentileOf(weight, index.baselineDeciles, index.tailMax));
 
   const band = bandFor(score);
+  /*
+   * "Mixed area" was doing two jobs badly: it read as a judgement about the
+   * neighbourhood rather than about the number, and it was the only one of the
+   * three headlines whose word did not appear anywhere else in the app. The
+   * bands are good / moderate / poor everywhere -- on the chip above this very
+   * line, on the slot's bars, in the comparison -- so this says moderate too.
+   */
   const headline =
-    band === "good" ? "Safe area" : band === "moderate" ? "Mixed area" : "Higher incident area";
+    band === "good" ? "Safe area" : band === "moderate" ? "Moderate area" : "Higher incident area";
   const comparison =
-    band === "good" ? "quieter than most of San Jose" :
-    band === "moderate" ? "about average for San Jose" :
-    "busier than most of San Jose";
+    band === "good" ? `quieter than most of ${city.name}` :
+    band === "moderate" ? `about average for ${city.name}` :
+    `busier than most of ${city.name}`;
   const detail = `${incidents} incidents within ${index.radiusMiles} mi in ${index.year} — ${comparison}.`;
 
   return { ...base, score, band, headline, detail, incidents: groupsNear(index, at, index.radiusMiles) };
