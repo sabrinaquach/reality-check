@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AddressInput } from "./AddressInput.tsx";
 import { icons } from "./icons.ts";
+import { useMobile } from "./useMobile.ts";
 import type { Priority } from "./types.ts";
 
 const CHOICES: Priority[] = ["commute", "safety", "cost"];
@@ -24,6 +25,14 @@ export function Onboarding({
   onDone: (work: string, priorities: Priority[]) => void;
   onCancel?: () => void;
 }) {
+  /**
+   * On a phone, focusing the field on open throws the keyboard over the lower
+   * half of the modal before either question has been read -- including the
+   * three priority buttons and Continue. The field is the first thing under
+   * the heading and takes one tap; on the desktop, where the keyboard costs
+   * nothing, it still focuses itself.
+   */
+  const mobile = useMobile();
   const [work, setWork] = useState(initialWork);
   const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
 
@@ -61,7 +70,7 @@ export function Onboarding({
             wrapperClass="field"
             inputId="work"
             maxHeight={150}
-            autoFocus
+            autoFocus={!mobile}
           />
 
           <div className="gap" />

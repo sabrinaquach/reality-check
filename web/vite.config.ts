@@ -10,6 +10,15 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    /**
+     * Listen on the LAN, not just the loopback, so the phone layout can be
+     * opened on an actual phone. The proxy below is resolved by this process,
+     * so the phone only needs to reach this port -- but note that the API's
+     * own `server.listen(PORT)` binds every interface as well, so :8787 is
+     * reachable from the network too, and anything on it can spend the Google
+     * and RentCast budgets. Dev-machine-on-a-trusted-network only.
+     */
+    host: true,
     proxy: { "/api": "http://localhost:8787" },
   },
 });

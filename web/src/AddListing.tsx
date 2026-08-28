@@ -9,6 +9,22 @@ export function AddListing({
   address,
   onAddressChange,
   onSubmit,
+  /**
+   * Which way the suggestion list opens. Down, as an address field's list
+   * normally does and as the reader expects to read it.
+   *
+   * It was up, so that it could not cover the two buttons under the field --
+   * but a list only covers them while it is open, and it closes on the pick
+   * that the reader came to make. Reading a list of addresses upwards, from
+   * the field back towards the top of the panel, was the worse trade.
+   */
+  suggestions = "down",
+  /**
+   * What the comparison button says. Defaults to the general "Add to
+   * comparison"; the phone's sheet names the slot it was opened from, because
+   * there it is filling that one rather than whichever happens to be free.
+   */
+  addLabel = "Add to comparison",
 }: {
   busy: boolean;
   error: string | null;
@@ -16,6 +32,8 @@ export function AddListing({
   address: string;
   onAddressChange: (v: string) => void;
   onSubmit: (address: string, rent: string, mode: "replace" | "append") => void;
+  suggestions?: "up" | "down";
+  addLabel?: string;
 }) {
   const [rent, setRent] = useState("");
   const ready = address.trim().length > 0 && !busy;
@@ -32,7 +50,7 @@ export function AddListing({
           icon={icons.searchSm}
           wrapperClass="input-row"
           ariaLabel="Property address"
-          placement="up"
+          placement={suggestions}
         />
         <div className="input-row">
           <img src={icons.dollar} alt="" />
@@ -55,7 +73,7 @@ export function AddListing({
         disabled={!ready || slotsFull}
         onClick={() => onSubmit(address, rent, "append")}
       >
-        {slotsFull ? "Both slots full" : "Add to comparison"}
+        {slotsFull ? "Both slots full" : addLabel}
       </button>
       <button className="btn" disabled={!ready} onClick={() => onSubmit(address, rent, "replace")}>
         {busy ? "Checking…" : "Check listing"}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRail } from "./useRail.ts";
 import { icons } from "./icons.ts";
+import { beginCardDrag } from "./touchDrag.ts";
 import { street } from "./address.ts";
 import { milesBetween } from "./geo.ts";
 
@@ -117,6 +118,13 @@ export function PlacesNearWork({
                   e.currentTarget.classList.add("dragging");
                 }}
                 onDragEnd={(e) => e.currentTarget.classList.remove("dragging")}
+                onPointerDown={(e) =>
+                  beginCardDrag(e, {
+                    address: l.address,
+                    rent: l.rent ? String(l.rent) : undefined,
+                    label: street(l.address),
+                  })
+                }
                 onClick={() => open(l)}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && open(l)}
               >

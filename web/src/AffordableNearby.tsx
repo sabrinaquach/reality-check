@@ -1,5 +1,6 @@
 import { useRail } from "./useRail.ts";
 import { icons } from "./icons.ts";
+import { beginCardDrag } from "./touchDrag.ts";
 import { pretty } from "./address.ts";
 
 /**
@@ -111,6 +112,7 @@ export function AffordableNearby({
                     e.currentTarget.classList.add("dragging");
                   }}
                   onDragEnd={(e) => e.currentTarget.classList.remove("dragging")}
+                  onPointerDown={(e) => beginCardDrag(e, { address: full, label: pretty(a.address) })}
                   onClick={() => onCheck(full)}
                   onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onCheck(full)}
                 >

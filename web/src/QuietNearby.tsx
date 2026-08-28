@@ -1,5 +1,6 @@
 import { useRail } from "./useRail.ts";
 import { icons } from "./icons.ts";
+import { beginCardDrag } from "./touchDrag.ts";
 import { pretty } from "./address.ts";
 import type { Band } from "./types.ts";
 
@@ -49,7 +50,9 @@ export function QuietNearby({
             </button>
           </div>
         )}
-        <p className="sub">Drag a card into a slot above, or use the form to add a new one.</p>
+        <p className="sub">
+          Quietest blocks in the police data, within four miles of {work || "your workplace"}.
+        </p>
       </div>
 
       {loading && <p className="note">Reading the block index…</p>}
@@ -80,6 +83,7 @@ export function QuietNearby({
                   e.currentTarget.classList.add("dragging");
                 }}
                 onDragEnd={(e) => e.currentTarget.classList.remove("dragging")}
+                onPointerDown={(e) => beginCardDrag(e, { address: full, label: pretty(s.address) })}
                 title={`Reality check ${pretty(s.address)}, or drag it into a slot`}
                 onClick={() => onCheck(full)}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onCheck(full)}

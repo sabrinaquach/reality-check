@@ -46,7 +46,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button { font-family: inherit; }
+/* Both inherited, and the colour is not cosmetic: Safari on iOS paints a
+   <button> with no colour of its own in the system accent blue, where every
+   other browser uses black. Declared once here rather than hunted down button
+   by button -- "Sign in" was the one that showed, but any other bare button
+   would have gone blue on a phone too. */
+button { font-family: inherit; color: inherit; }
 
 /* ---------- nav ---------- */
 .nav {
@@ -274,7 +279,12 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   cursor: pointer;
 }
 .recompare:hover:not(:disabled) { background: var(--accent-press); }
-.recompare:disabled { opacity: .45; cursor: not-allowed; }
+/* It waits until it means something. Two empty slots have nothing to compare,
+   and a permanently greyed-out button at the foot of the box was a control the
+   box wore for most of its life without ever being able to use. Its only state
+   now is live, which is also what leaves the empty box the height the design
+   draws it at. */
+.recompare:disabled { display: none; }
 .vs { align-self: center; font-size: 20px; font-weight: 700; color: var(--ink-50); }
 
 .slot {
@@ -295,7 +305,9 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 /* The empty slot's own mark -- a direct child, unlike the avatar inside a
    filled slot's head. */
 .slot > img { width: 46px; height: 46px; opacity: .5; }
-.slot.over { border-color: var(--accent); background: rgba(232, 168, 160, .12); }
+/* Two ways in: `.over` is the HTML5 drag's React state, [data-over] is what
+   touchDrag.ts sets directly -- see there for why it is an attribute. */
+.slot.over, .slot[data-over] { border-color: var(--accent); background: rgba(232, 168, 160, .12); }
 
 .slot.filled {
   position: relative;
@@ -464,7 +476,43 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .spot .metric b.good { color: var(--good); }
 .spot .metric b.moderate { color: var(--moderate); }
 .spot .metric b.poor { color: var(--poor); }
+/* The design's 19px grip, 7px in from the corner. A picture, not a control:
+   the whole card is the drag source on both mouse and touch, so this says so
+   rather than being the only place it can be done from. */
 .spot .handle { position: absolute; top: 7px; right: 7px; width: 19px; height: 19px; opacity: .45; }
+
+/* What follows the finger: the card's name, not the card -- a 264px panel
+   under a fingertip would cover the slots it is being carried to. */
+.drag-ghost {
+  position: fixed; left: 0; top: 0; z-index: 40;
+  pointer-events: none;
+  max-width: 240px; padding: 8px 12px;
+  background: var(--card); border-radius: var(--radius-sm);
+  box-shadow: var(--panel-shadow);
+  font-family: inherit; font-size: 13px; font-weight: 500; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- the drag notice ----------
+ * A notice rather than a caption: it sits on its own between the slots and the
+ * first rail, in the sunken grey the app already uses for a surface that is
+ * not a card, and it leaves for good once it is dismissed.
+ */
+.tip {
+  display: grid; grid-template-columns: 22px 1fr 20px;
+  align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--sunken); border-radius: var(--radius-sm);
+}
+.tip p { margin: 0; font-size: 13px; line-height: 1.4; color: var(--ink-60); }
+.tip-mark { width: 22px; height: 22px; opacity: .5; }
+.tip-close {
+  display: grid; place-items: center;
+  width: 20px; height: 20px; padding: 0;
+  background: none; border: 0; cursor: pointer; opacity: .4;
+}
+.tip-close:hover, .tip-close:focus-visible { opacity: 1; }
+.tip-close img { width: 11px; height: 11px; display: block; }
 
 .empty {
   border: 1px dashed var(--dashed); border-radius: var(--radius-sm);
@@ -488,6 +536,22 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   position: fixed; inset: 0; z-index: 10;
   background: var(--scrim);
   display: grid; place-items: center; padding: 1.5rem;
+  /*
+   * The column is stated rather than left implicit, and this is load-bearing.
+   *
+   * An implicit `auto` track sizes itself to the item's contribution, and the
+   * modal contributes its declared `width: 466px` -- its `max-width: 100%`
+   * cannot reduce that, because a percentage has nothing to resolve against
+   * while the track it belongs to is still being sized. So the track came out
+   * 466px wide on a 402px phone and simply overflowed, taking the modal off
+   * the right edge with it.
+   *
+   * A `1fr` track is sized by the container instead of by its contents, which
+   * makes the grid area definite -- so `max-width: 100%` finally has a real
+   * number to resolve against, and the modal fits and centres. minmax(0, 1fr)
+   * rather than 1fr so the track's own floor is not its min-content either.
+   */
+  grid-template-columns: minmax(0, 1fr);
 }
 .modal {
   position: relative;
@@ -760,6 +824,9 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
  * so the bigger one simply reaches further right. The inline `right` is
  * computed per icon size in RealityCheckPage. */
 .rc-head { position: relative; min-height: 75px; }
+/* The phone folds the section heading into the card and shows this instead;
+   on the desktop the <h3> above the card already says it. */
+.rc-pillar-name { display: none; }
 .rc-icon {
   position: absolute;
   top: 50%; transform: translateY(-50%);
@@ -909,6 +976,19 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 
 /* ---------- map ---------- */
 .zone {
+  /*
+   * The controls stack down the map's right edge: the expand button, the
+   * filters under it, and on the expanded map the street list under those.
+   * Stated as variables because every one of those positions is derived from
+   * the same two insets and the button's size, and all three change together
+   * -- expanded the insets grow, and on the phone's hero map the button does.
+   */
+  --zone-top: 16px;
+  --zone-side: 16px;
+  --zone-control: 27px;
+  /* Where the rail continues below the expand button. */
+  --zone-rail: calc(var(--zone-top) + var(--zone-control) + 8px);
+
   position: relative;
   border: .5px solid rgba(0, 0, 0, 0.05);
   border-radius: var(--radius);
@@ -936,7 +1016,11 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
  * unselected pill reads as one of the map's icon buttons and the selected one
  * reads as the app's primary colour.
  */
-.zone-pills { position: absolute; top: 16px; left: 16px; display: grid; gap: 7px; z-index: 2; }
+.zone-pills {
+  position: absolute; z-index: 2;
+  top: var(--zone-rail); right: var(--zone-side);
+  display: grid; justify-items: end; gap: 7px;
+}
 .zone-pill {
   width: 77px; height: 29px;
   border: 1px solid rgba(0, 0, 0, 0.05);
@@ -956,8 +1040,9 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    border sits inside the 27px box (box-sizing is border-box globally), which
    is where the SVG circles draw their stroke too. */
 .zone-expand {
-  position: absolute; top: 16px; right: 16px; z-index: 2;
-  width: 27px; height: 27px; padding: 0;
+  position: absolute; z-index: 2;
+  top: var(--zone-top); right: var(--zone-side);
+  width: var(--zone-control); height: var(--zone-control); padding: 0;
   background: #FBFBFB;
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 50%;
@@ -985,8 +1070,7 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   height: auto;
   box-shadow: var(--panel-shadow);
 }
-.zone.expanded .zone-pills { top: 20px; left: 20px; }
-.zone.expanded .zone-expand { top: 20px; right: 20px; }
+.zone.expanded { --zone-top: 20px; --zone-side: 20px; }
 
 /* ---------- the Saved page's right column ----------
  * Its own stacking context so the expand control sits above the panel, and
@@ -1092,7 +1176,8 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
  * readable rows rather than a wall of near-identical addresses.
  */
 .zone-list {
-  position: absolute; top: 16px; right: 56px; bottom: 16px; z-index: 3;
+  position: absolute; z-index: 3;
+  top: calc(var(--zone-rail) + 73px); right: var(--zone-side); bottom: var(--zone-top);
   width: 296px; display: flex; flex-direction: column;
   background: var(--card); border-radius: var(--radius-sm); box-shadow: var(--panel-shadow);
   overflow: hidden;
@@ -1397,7 +1482,9 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
 .cmp-card {
   position: relative;
   min-height: 93px;
-  padding: 18px 25px 18px 47px;
+  /* The 47px left lane was the tick's. It rides on the headline now, so the
+     card's two sides match and the text starts where the card does. */
+  padding: 18px 25px;
   background: var(--card); border-radius: var(--radius);
   box-shadow: var(--card-shadow);
 }
@@ -1409,7 +1496,18 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
    see-through tint went muddy over the page. */
 .cmp-amenities .cmp-card.won { background: var(--won-flat); }
 .cmp-card.out { opacity: .7; }
-.cmp-card .cmp-tick { left: 20px; top: 30px; transform: none; }
+/* Bottom-right, on the same axis as the chevron above it: the chevron is 21px
+   at right 18, so its centre is 28.5 in; the tick is 17px, so 20 puts the two
+   on one line down that edge. */
+.cmp-card .cmp-tick {
+  left: auto; right: 20px;
+  top: auto; bottom: 18px;
+  transform: none;
+}
+/* The corner is spoken for on a winning card, so its detail line steps around
+   it. Only there -- a losing card has the width, and a right-hand gutter does
+   not move where a line starts, so the pair still read across cleanly. */
+.cmp-card:has(.cmp-tick) .cmp-detail { padding-right: 30px; }
 .cmp-headline { font-size: 16px; font-weight: 600; margin: 0; padding-right: 34px; }
 .cmp-detail { font-size: 16px; font-weight: 500; color: var(--ink-50); margin: 5px 0 0; padding-right: 34px; }
 .cmp-card .rc-chev { top: 18px; right: 18px; }
@@ -1458,3 +1556,719 @@ h3 { font-size: 20px; font-weight: 700; margin: 0; }
   font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap;
 }
 .crash-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- the phone layout ----------
+ * Figma node 2113:6, a 402px frame. Everything runs 16px from either edge,
+ * the type steps down a size (h1 36 -> 20, h2 24 -> 20, subtitles 16 -> 13),
+ * the two-up desktop grid becomes one column, and the two pieces of chrome
+ * the desktop does not have appear: an Add-a-listing sheet pinned to the foot
+ * of the screen (node 2113:546) and a floating tab pill (node 2113:8).
+ *
+ * The design is drawn as a greyscale wireframe -- #b8b8b8 boxes, #d9d9d9
+ * sheet, #919191 pill. None of those greys are carried over. They are the
+ * wireframe saying "a surface here", and this app already has surfaces: the
+ * card white, the sunken grey, the salmon, and the three blacks. So the
+ * geometry is the design's and the palette and the Manrope are the web app's,
+ * unchanged.
+ *
+ * The breakpoint is shared with useMobile.ts, which renders the two pieces of
+ * chrome -- so the layout React builds and the layout CSS styles cannot
+ * disagree about which one is on screen.
+ */
+@media (max-width: 700px) {
+  /* Deep enough to clear the tab pill where the closed sheet pushes it to:
+     the lip, plus the 12px it clears it by, plus the pill's own 60. */
+  .page { padding: 8px 16px calc(var(--sheet-lip, 30px) + 76px); }
+
+  /* The destinations moved to the pill at the bottom, so the top bar keeps
+     only the mark and the account -- the design has no top bar at all, but
+     signing in has to be reachable from somewhere. */
+  /* The mark at one end and the account at the other, as on the desktop --
+     the flex spacer between them still does that work. Only the tabs go, to
+     the pill at the foot of the screen. */
+  .nav { padding: 16px 16px 10px; gap: 12px; }
+  .nav .navlink { display: none; }
+
+  h1 { font-size: 20px; margin-bottom: 3px; }
+  h2 { font-size: 20px; }
+  .commuting { font-size: 13px; margin-bottom: 18px; }
+  /* A control of its own beside the sentence, so it is sized for a fingertip
+     rather than for the line -- 32px, where the last version was 19. On the
+     surface every other icon button in the app wears: #FBFBFB behind a 1px
+     black at 5%, which is what circle-btn.svg paints behind the back arrow
+     and the heart, and what .zone-expand paints in CSS.
+     `flex: none` so a long workplace wrapping to two lines takes the width it
+     needs from the text and not from this. */
+  .commuting button {
+    flex: none;
+    display: inline-grid; place-items: center;
+    width: 32px; height: 32px;
+    background: #FBFBFB;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 50%;
+    opacity: 1;
+  }
+  .commuting button:hover { background: #ffffff; }
+  .commuting img { width: 17px; height: 17px; }
+
+  .layout { gap: 30px 0; }
+  .col { gap: 30px; }
+  .section-head { margin-bottom: 13px; }
+  .section-head .sub { font-size: 13px; }
+  /* A rail scrolls under the finger here, so a pair of 28px arrow targets is
+     a control for a gesture the reader already has. */
+  .carousel-nav { display: none; }
+
+  /* ---- comparison box: node 2113:42, 370x154 ----
+   * Sticky, as on the desktop, and here it is load-bearing rather than a
+   * convenience: the rails are below the fold, so a card dragged up from one
+   * has nothing to land on unless the box has parked at the top. The design
+   * draws it inline at the head of the screen, which is what it is until you
+   * scroll past it; from then on the condensed `.stuck` box stands in, and at
+   * around 70px tall it is a drop target rather than a third of the screen. */
+  .slots {
+    padding: 20px;
+    /* 138px slots either side of a 23px "vs" in a 330px inner width. */
+    gap: 0 16px;
+    min-height: 155px;
+  }
+  .slot { min-height: 115px; padding: 12px; font-size: 15px; }
+  /* An empty slot opens the sheet to fill itself, so it reads as pressable. */
+  .slot[role="button"] { cursor: pointer; }
+  .slot[role="button"]:active { background: rgba(0, 0, 0, .03); }
+  .slot:not(.filled) { gap: 8px; }
+  /* The design's empty slot carries only its label (nodes 2113:43-47), but the
+     box is something you press here, and a mark above the words is what says
+     so. The desktop's 46px house does not fit -- 115px tall, less 24px of
+     padding, leaves 91px, and 46 plus a gap plus two wrapped lines is more
+     than that -- so it comes down to 28px, which leaves the label room to
+     wrap. Hidden again once the box condenses: parked at the top it is a drop
+     target and every pixel of its height is spent on being out of the way. */
+  .slot > img { width: 28px; height: 28px; }
+  .slots.stuck .slot > img { display: none; }
+  .slot.filled { padding: 14px 16px; }
+
+  /* A filled slot on the phone is the address and the score, and nothing else.
+   *
+   * The rent and the three bars are not dropped for being unimportant but for
+   * having nowhere to go: two slots in a 370px box are 137px each, and a bar
+   * with a 62px label column in 105px of usable width is a label and a sliver.
+   * Slot.tsx withholds the verdict line for the same reason -- four lines of
+   * it pushed the score off the card. All three are one tap away on the
+   * listing's own page, in full. */
+  .slot.filled .pillars,
+  .slot.filled .slot-rent { display: none; }
+
+  /* Address above, score below: side by side, even the pill would leave the
+     address about 30px. The pill spans the card because at this width it is
+     the card's colour as much as its number -- which is the job the ring's
+     44px arc was doing badly. min-width goes because the shared rule's 102px
+     overflows a slot on a 375px screen. */
+  .slot.filled .slot-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .slot.filled .slot-id { width: 100%; }
+  .slot.filled .rc-score {
+    width: 100%; min-width: 0; height: 26px;
+    margin-left: 0; padding: 0 10px;
+    font-size: 13px;
+  }
+  .slot-addr { font-size: 15px; }
+
+  /* The design's box holds the two slots and nothing else. The button is the
+     only way into the breakdown, so it cannot simply go -- but it can wait
+     until it means something, which leaves the empty box exactly as drawn. */
+  .recompare { margin-top: 14px; width: 100%; }
+
+  /* ---- rails: cards 268x110, node 2114:578 ----
+   * Full-bleed, because the design runs the second card off the frame's edge
+   * rather than stopping it at the gutter -- which is what says the row
+   * scrolls. The padding puts the gutter back inside the scroller, and the
+   * 6px of the desktop rule is still there for the cards' shadows. */
+  .rail { gap: 19px; padding: 6px 16px; margin: -6px -16px; }
+  .spot { width: min(268px, 68vw); }
+  .spot .addr { font-size: 15px; }
+
+  /* One column, so the map takes a stated height rather than whatever is
+     left of a row that no longer has a taller sibling to match. */
+  .col.fill { grid-template-rows: auto; align-content: start; }
+  .zone.fill { min-height: 300px; }
+
+  /* ---- the reality check, rebuilt: node 2113:376 ----
+   * The desktop page reads as a document: a heading, then sections, then the
+   * map as its closing figure. The phone design turns it into a screen. The
+   * map is the top 369px and the thing you land on, everything else rides up
+   * over its lower edge on a rounded panel, and the listing itself moves to a
+   * bar at the foot so it is still there when its address has scrolled away.
+   *
+   * Keyed on .rc-phone, which RealityCheckPage sets only when this is the
+   * whole screen -- embedded in the Saved column it stays the column it was.
+   */
+  .nav-off { display: none; }
+  /* Clear of the footer bar, which is fixed and so cannot make room itself:
+     it stands 96px off the bottom and is 61 tall, and .page's own bottom
+     padding is sized for the tab pill alone. */
+  .rc-phone { position: relative; padding: 0 0 80px; max-width: none; }
+
+  /* Full bleed, out through the page's own 16px gutters. */
+  /* Out through the page's 16px gutters and its 8px of top padding, so the
+     map reaches all four edges the way node 2113:377 has it. */
+  .rc-phone .rc-map { margin: -8px -16px 0; }
+  .rc-phone .rc-map h2 { display: none; }
+  .rc-phone .rc-map .zone { border: 0; border-radius: 0; }
+
+  /* Node 2113:381: the panel, lifted 19px over the map's lower edge. Its own
+     surface, because the map behind it is a photograph and white on white
+     would leave no seam. */
+  .rc-phone .rc-body {
+    position: relative; z-index: 1;
+    margin: -19px -16px 0;
+    padding: 20px 16px 0;
+    background: var(--page);
+    border-radius: 24px 24px 0 0;
+  }
+
+  /* Over the map rather than above it -- nodes 2113:384 and 2113:392 float the
+     back arrow and the heart on the image itself.
+   *
+     Pinned to 0 rather than 16: this row sits inside .page's own 16px gutter,
+     while the map it lies on is bled out through it. Insetting again would put
+     these controls on a different frame from the map's expand button, and the
+     two of them have to line up.
+   *
+     The padding is how the heart steps aside for the expand button, which owns
+     the corner: 39 across and 8 between. It cannot simply be positioned there,
+     because it is the trailing item of a flex row and the button is not in
+     this row at all -- it belongs to the map. */
+  .rc-phone .rc-top {
+    position: absolute; top: 16px; left: 0; right: 0; z-index: 2;
+    margin: 0; padding-right: 47px;
+  }
+
+  /* The expand control and the heart are two round controls in the same corner
+     (nodes 2113:388 and 2113:392), so they are drawn the same size and set
+     side by side, expand inboard of the heart.
+   *
+     39px is .circle's, and the two surfaces already agree: circle-btn.svg is
+     #FBFBFB behind a 1px black at 5%, which is what .zone-expand paints in
+     CSS. The glyphs grow with the circle, keeping the proportion the 27px
+     version had. */
+  .rc-phone .rc-map .zone { --zone-control: 39px; }
+  .rc-phone .rc-map .zone-expand .glyph-open { width: 20px; height: 20px; }
+  .rc-phone .rc-map .zone-expand .glyph-close { width: 30px; height: 30px; }
+
+  .rc-phone h1 { font-size: 20px; }
+  .rc-phone .rc-head-row { gap: 10px; margin-bottom: 6px; }
+  .rc-phone .rc-meta { font-size: 15px; gap: 7px; margin-bottom: 10px; }
+  .rc-phone .rc-summary { font-size: 15px; margin-bottom: 22px; }
+
+  /* The info control beside the score, and the note it opens. */
+  .rc-why {
+    display: grid; place-items: center;
+    width: 22px; height: 22px; padding: 0;
+    background: none; border: 0; cursor: pointer; opacity: .5;
+  }
+  .rc-why[aria-expanded="true"] { opacity: 1; }
+  .rc-why img { width: 18px; height: 18px; }
+  .rc-weighting {
+    display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start;
+    margin: -12px 0 22px; padding: 12px 14px;
+    background: var(--sunken); border-radius: var(--radius-sm);
+    font-size: 12px; line-height: 1.4; color: var(--ink-60);
+  }
+  .rc-weighting img { width: 20px; height: 20px; opacity: .6; }
+
+  /* ---- pillar cards: node 2113:403 ----
+   * 370x96 with a 1px hairline, the band chip and the pillar's name on one
+   * row, and the headline and detail under it. The heading and the basis line
+   * that sit above each card on the desktop go: the design has neither, the
+   * name has moved inside, and the basis is fine print this screen has no room
+   * for -- it is still on the card's own panel when one opens. */
+  .rc-phone .rc-pillar > h3,
+  .rc-phone .rc-sub { display: none; }
+  .rc-phone .rc-section { margin-bottom: 16px; }
+  .rc-phone .rc-card {
+    min-height: 96px; padding: 14px 16px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    box-shadow: none;
+  }
+  .rc-phone .rc-head { min-height: 0; }
+  /* Under the band chip rather than beside it, as node 2113:405 has it, and
+     bold -- it is the card's title, and the three lines under it read down
+     from it: what the pillar is, then what it came to, then why. */
+  .rc-phone .rc-pillar-name {
+    display: block; margin: 12px 0 0;
+    /* Clear of both controls on that edge -- the chevron's corner above and
+       the icon's lane beside it. */
+    padding-right: 51px;
+    /* 16px, matching the rows inside the panel this card opens -- .rc-mode,
+       .rc-incident and .rc-fact all sit at 16. The card's title and the list
+       it reveals are the same rank of thing, so they read at one size. */
+    font-size: 16px; font-weight: 700; color: var(--ink);
+  }
+  /* The icon's lane: 8px inset plus its 35px, and 8px clear of the text. It
+     is centred, so it is these two middle lines it would otherwise sit on. */
+  .rc-phone .rc-headline { font-size: 13px; font-weight: 500; margin-top: 4px; padding-right: 51px; color: var(--ink); }
+  .rc-phone .rc-detail { font-size: 12px; margin-top: 3px; padding-right: 51px; }
+  /* One round thing on the right of the card, as node 2113:410 has it -- and
+     it is the control rather than the decoration. The pillar icon and the
+     chevron were both pinned to the card's right edge, the icon centred and
+     the chevron in the corner, so they read as a collision. The card now names
+     its pillar in bold on its own line, which is what the icon was there to
+     say, so the icon stands down and the chevron takes the spot: centred, the
+     full height of the card away from the text. */
+  /* 35px, as node 2113:410 draws it, centred down the card's right edge --
+     and now that the chevron has gone up to the corner there is room for it
+     there. `!important` because the shared component sets width, height and
+     `right` inline, sized for the desktop card. Nudged to 8px so its centre
+     lines up with the chevron's above it. */
+  .rc-phone .rc-icon {
+    right: 8px !important;
+    width: 35px !important; height: 35px !important;
+  }
+  /* Top-right, inset off the card's own padding rather than flush to its edge
+     as it first was. `transform: none` because the chevron is no longer
+     vertically centred -- the rotation on the open state lives on the <img>
+     inside, so it is untouched by this. */
+  .rc-phone .rc-chev {
+    right: 12px; top: 12px; transform: none;
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+  }
+
+  /* ---- amenities ----
+   * In a card, like the three pillars above it -- it is the same kind of claim
+   * about the same listing, and loose on the page it read as a footnote to
+   * them rather than one more of them. Only the desktop card's drawn minimum
+   * height goes: at one column the list decides how tall it is.
+   *
+   * The two lines at its head keep their full width. The 51px lane the pillar
+   * cards reserve is the pillar icon's, and this card has neither an icon nor
+   * a chevron to make room for. */
+  .rc-phone .rc-card.tall { min-height: 0; }
+  .rc-phone .rc-card.tall > .rc-headline,
+  .rc-phone .rc-card.tall > .rc-detail { padding-right: 0; }
+  .rc-phone .rc-amenities { grid-template-columns: 1fr; gap: 0; margin-top: 16px; }
+  .rc-phone .rc-amenities ul + ul { border-left: 0; padding-left: 0; }
+  .rc-phone .rc-amenities li { font-size: 15px; padding-bottom: 18px; }
+  .rc-phone .rc-amenities .a-note { font-size: 13px; }
+
+  /* ---- the listing, parked at the foot: node 2113:469 ----
+   * Above the tab pill rather than beside it: this bar is about the listing on
+   * screen, the pill is about which screen you are on, and stacking them keeps
+   * those two questions apart. */
+  .rc-bar {
+    position: fixed; z-index: 7;
+    left: 16px; right: 16px;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    display: flex; align-items: center; gap: 12px;
+    min-height: 61px; padding: 8px 8px 8px 18px;
+    background: var(--card); border-radius: var(--pill);
+    box-shadow: var(--panel-shadow);
+  }
+  .rc-bar-id { flex: 1; min-width: 0; }
+  .rc-bar-addr {
+    font-size: 15px; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rc-bar-rent { margin: 2px 0 0; font-size: 12px; color: var(--ink-50); }
+  .rc-bar-rent b { font-weight: 400; color: var(--ink); }
+  .rc-bar-add {
+    flex: none; height: 45px; padding: 0 20px;
+    background: var(--accent); border: 0; border-radius: var(--pill);
+    font-family: inherit; font-size: 15px; color: var(--ink);
+    cursor: pointer;
+  }
+  .rc-bar-add:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ---- saved ----
+   * The same ranked cards the desktop shows, at a phone's width. The map goes:
+   * on the desktop it is what the right-hand column holds until a listing is
+   * selected, and here there is no column -- a selection leaves for the page
+   * it opens, so a map stacked under the list is a second screen's worth of
+   * scrolling under the one thing this screen is for. The reality check it
+   * opens carries the same map at its top anyway.
+   */
+  .saved { gap: 0; }
+  .saved-map { display: none; }
+  .saved-head { margin-bottom: 14px; }
+  .saved-sub { font-size: 13px; }
+  /* What a tap does, since on a phone nothing on screen demonstrates it. */
+  .saved-how { font-size: 13px; color: var(--ink-50); margin: 6px 0 0; }
+
+  /* 136px was drawn for a 404px column. At 370 the summary wraps a line more,
+     so the height is left to the content and the ring comes in a size. */
+  .saved-card {
+    min-height: 0; padding: 14px 14px 14px 12px;
+    grid-template-columns: 20px 1fr auto; gap: 0 12px;
+  }
+  .saved-card + .saved-card { margin-top: 14px; }
+  .saved-pick { width: 20px; height: 20px; }
+  .saved-addr { font-size: 15px; }
+  .saved-line { max-width: none; }
+  .saved-card .score-ring { width: 46px; height: 46px; }
+  .saved-card .score-ring svg { width: 46px; height: 46px; }
+  .saved-card .ring-pct { font-size: 13px; }
+  .saved-card .score-ring-label { display: none; }
+  /* Always on: it waits for a hover on the desktop, and a phone has none. */
+  .saved-heart { opacity: .55; top: 10px; right: 10px; }
+
+  /* ---- the detailed breakdown: nodes 2113:146 and 2113:223 ----
+   * The same page the desktop shows, reordered and re-proportioned. What
+   * changes is the shape of the two heads, the order of the heads and the
+   * verdict, and the size of everything inside a 177px column.
+   */
+  /* Centred in the bar the back arrow sits in, and centred on the screen
+     rather than in what is left of it -- absolute, so the 39px control on the
+     left does not push it off centre. */
+  .cmp-phone .rc-top { position: relative; margin-bottom: 20px; }
+  .cmp-title {
+    position: absolute; left: 0; right: 0;
+    text-align: center; font-size: 15px; font-weight: 500; color: var(--ink-50);
+    letter-spacing: .15px; pointer-events: none;
+  }
+
+  /* ---- the two heads: nodes 2113:211 and 2113:216 ----
+   * Not the sticky bar of the desktop -- there is no room to spend a strip of
+   * a phone screen on it, and the verdict directly under them says which won
+   * anyway. A ring, the address, the rent, and "vs" between the pair. */
+  .cmp-phone .cmp-heads {
+    /* Parked at the top once scrolled past, where it compresses to the pill of
+       node 2219:7618. Every card below is a claim about one of these two, and
+       read left or right is the only thing that says which -- so by the third
+       pillar, with the addresses gone off the top, the columns are anonymous.
+       The desktop solves this with a sticky bar of the same two buttons; a
+       phone cannot spend 150px of its screen on one, hence the pill. */
+    position: sticky; top: 9px; z-index: 5;
+    padding: 0; margin-bottom: 0;
+    grid-template-columns: 1fr 1fr; gap: 12px;
+    transition: padding .16s ease, background .16s ease, box-shadow .16s ease;
+  }
+
+  /* ---- compressed: node 2104:1166, a 54px pill at the page's own width ----
+   * The rings and the rents go; the two names and the "vs" between them are
+   * all that is left, which is all it has to answer. */
+  .cmp-phone .cmp-heads.stuck {
+    padding: 0 14px;
+    min-height: 54px;
+    /* .cmp-row aligns its two columns to `start`, which is right when they are
+       cards of different heights and wrong here: the row stretches to the
+       pill's 54px and the names sat along its top edge. Centred, they sit on
+       the same line as the "vs" between them. */
+    align-items: center;
+    background: var(--card); border-radius: var(--pill);
+    box-shadow: var(--panel-shadow);
+  }
+  .cmp-phone .cmp-heads.stuck .score-ring-wrap,
+  .cmp-phone .cmp-heads.stuck .cmp-rent,
+  .cmp-phone .cmp-heads.stuck .cmp-tick { display: none; }
+  /* Centred in its half of the pill rather than reading outward from it. */
+  .cmp-phone .cmp-heads.stuck .cmp-head,
+  .cmp-phone .cmp-heads.stuck .cmp-head:last-child {
+    justify-items: center; align-content: center; text-align: center;
+  }
+  .cmp-phone .cmp-heads.stuck .cmp-addr { display: none; }
+  .cmp-phone .cmp-heads.stuck .cmp-addr-short {
+    display: block;
+    font-size: 15px; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%;
+  }
+  /* On the pill's own middle line now, not the rings' centre. */
+  .cmp-phone .cmp-heads.stuck::before { top: 50%; font-size: 15px; font-weight: 400; }
+
+  /* Only ever shown by the compressed pill above. */
+  .cmp-addr-short { display: none; }
+  .cmp-phone .cmp-head {
+    display: grid; justify-items: start; gap: 6px;
+    min-height: 0; padding: 0;
+    background: none; box-shadow: none;
+    text-align: left;
+  }
+  /* The right-hand listing reads inward, towards the pair it belongs to. */
+  .cmp-phone .cmp-head:last-child { justify-items: end; text-align: right; }
+  .cmp-phone .cmp-head .score-ring { width: 96px; height: 96px; }
+  .cmp-phone .cmp-head .score-ring svg { width: 96px; height: 96px; }
+  .cmp-phone .cmp-head .ring-pct { font-size: 24px; }
+  .cmp-phone .cmp-addr { font-size: 15px; text-align: inherit; }
+  .cmp-phone .cmp-rent { font-size: 15px; color: var(--ink-50); }
+  /* The tick has the corner of the ring rather than the middle of the row. */
+  .cmp-phone .cmp-head .cmp-tick { left: auto; right: 0; top: 0; transform: none; }
+
+  /* Node 2113:210, sitting on the rings' own centre line. */
+  .cmp-phone .cmp-heads::before {
+    content: "vs";
+    position: absolute; left: 50%; top: 48px;
+    transform: translate(-50%, -50%);
+    font-size: 20px; font-weight: 700; color: var(--ink-50);
+  }
+  /* No `position: relative` to anchor this -- one was here, and it silently
+     beat the `position: sticky` above it on source order, which is why the
+     pill never parked. Sticky is a positioned value in its own right, so the
+     absolute ::before has its containing block either way. */
+
+  /* ---- verdict, ruled off: nodes 2113:159 and 2113:160 ---- */
+  .cmp-phone .cmp-verdict-block {
+    margin: 22px 0;
+    padding: 22px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .cmp-phone .cmp-verdict { font-size: 18px; margin-bottom: 6px; }
+  .cmp-phone .cmp-summary { font-size: 15px; color: var(--ink-50); margin: 0; max-width: none; }
+
+  /* ---- pillar rows ---- */
+  .cmp-phone .cmp-section { margin-bottom: 26px; }
+  .cmp-phone .cmp-section h3 { font-size: 18px; }
+  .cmp-phone .cmp-section h2 { font-size: 18px; }
+  .cmp-phone .cmp-sub { font-size: 15px; margin: 2px 0 12px; }
+  /* Two columns at 177px each, which is what a 370px page allows. The desktop
+     rule collapses these to one below 900px; this puts them back, because the
+     whole point of the page is reading across. */
+  .cmp-phone .cmp-row { grid-template-columns: 1fr 1fr; gap: 17px; }
+  /* The desktop card keeps a 47px left lane for its tick. At 177px wide that
+     is a quarter of the card, so the tick moves to the corner the chevron does
+     not occupy and the text gets the room back. */
+  /* The chevron's lane is the headline's alone. As card padding it cost every
+     row of the opened panel 18px as well, and those rows have none to spare. */
+  .cmp-phone .cmp-card { min-height: 78px; padding: 12px; }
+  .cmp-phone .cmp-headline { font-size: 15px; font-weight: 400; padding-right: 26px; }
+  .cmp-phone .cmp-detail { font-size: 13px; margin-top: 6px; padding-right: 0; }
+  .cmp-phone .cmp-card .rc-chev { top: 10px; right: 8px; }
+  /* Same axis, at the phone's tighter inset: chevron centre 18.5 in, tick 10. */
+  .cmp-phone .cmp-card .cmp-tick { right: 10px; bottom: 10px; }
+
+  /* ---- what a card opens to ----
+   * These panels are shared with the reality check, where they have a whole
+   * card's width, and with the desktop comparison, where a column is 450px.
+   * Here a column is 177px. At their own 16px with 12px gutters, a mode row
+   * wanted 147px of the 153 available before its label had wrapped once --
+   * which is the squeeze. Everything drops to 12 and the gutters halve.
+   */
+  .cmp-phone .cmp-open { margin-top: 10px; padding-top: 10px; }
+  .cmp-phone .cmp-open .rc-modes-head { font-size: 10px; }
+  .cmp-phone .cmp-open .rc-mode,
+  .cmp-phone .cmp-open .rc-fact,
+  .cmp-phone .cmp-open .rc-incident { font-size: 12px; gap: 6px; padding: 6px 0; }
+  .cmp-phone .cmp-open .rc-mode { grid-template-columns: 16px 1fr auto; }
+  .cmp-phone .cmp-open .rc-mode .m-icon { width: 16px; height: 16px; }
+  /* The label and its figure stack: "Typical nearby" beside "$2,400/mo" is
+     146px of words for 153px of column, and the first thing to give would be
+     the label -- which is the half that says what the number is. */
+  .cmp-phone .cmp-open .rc-fact { grid-template-columns: 1fr; gap: 2px; }
+  /* The count, not the share: two listings side by side are already the
+     comparison, so the raw number is the one worth the room. */
+  .cmp-phone .cmp-open .rc-incident { grid-template-columns: 1fr auto; }
+  .cmp-phone .cmp-open .rc-incident .i-share { display: none; }
+  .cmp-phone .cmp-open .rc-incident-note { font-size: 11px; }
+
+  .cmp-phone .cmp-item { font-size: 12px; grid-template-columns: 1fr; padding: 6px 0; }
+  .cmp-phone .cmp-item .i-miles { display: none; }
+  .cmp-phone .cmp-item .i-note { font-size: 11px; }
+
+  /* ---- the expanded map is the screen ----
+   * On the desktop the expanded map floats on the page, inset 32px inside a
+   * scrim, because there is a page worth reading around it. On a phone that
+   * inset is a border around nothing -- 32px of dimmed page on all four sides
+   * of the only thing anyone is looking at -- so expanding here is a
+   * navigation: the map takes the whole screen and the cross is the way back.
+   */
+  .zone.expanded {
+    inset: 0;
+    border: 0; border-radius: 0;
+    box-shadow: none;
+  }
+  /* env() is 0 in an ordinary browser tab, where the status bar is already
+     outside the viewport; it earns its keep on a home-screen install. The
+     side inset keeps its plain 16 -- only the top edge has a notch to dodge. */
+  .zone.expanded { --zone-top: calc(16px + env(safe-area-inset-top, 0px)); --zone-side: 16px; }
+  /* Top-left, which the filters have vacated for the right-hand rail -- and
+     the foot of the map belongs to the street list now. */
+  .zone.expanded .zone-legend {
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    bottom: auto; left: 16px;
+  }
+  /* A fixed 296px panel held 56px off the right edge started at x=50 on a
+     402px screen -- straight through the filter pills, and clipped off the
+     left edge entirely at the old 32px inset. Full width at the foot of the
+     map instead, which is where a phone puts a list you scroll. */
+  .zone-list {
+    top: auto; left: 16px; right: 16px; bottom: 16px;
+    width: auto; max-height: 55%;
+  }
+
+  /* ---- Add a listing, as a bottom sheet: node 2113:546 ----
+   * The panel is 402px wide at x=0, so it is the full width of the screen
+   * with only its top corners rounded. It needs a shadow the design does not
+   * draw: the design separates sheet from page with a step from white to
+   * #d9d9d9, and this palette's equivalent step -- card white to sunken -- is
+   * too quiet to carry an edge on its own. */
+  .sheet {
+    position: fixed; inset: auto 0 0 0; z-index: 8;
+    background: var(--sunken);
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.10);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /*
+     * Not a scroller, and that is deliberate: this was `max-height: 88vh` with
+     * `overflow-y: auto`, which clipped the address suggestions. The list is
+     * positioned out of flow below its field, and an overflow other than
+     * visible cuts anything that leaves the box -- so on a phone the list
+     * either half-appeared or did not appear at all.
+     *
+     * The panel is a heading, two fields, a note and two buttons -- around
+     * 330px, on the shortest phone still in use. It has never needed to
+     * scroll, and it cannot both scroll and let a dropdown out.
+     */
+    overflow: visible;
+    /* Closed is this panel pushed off the bottom of the screen rather than
+       taken out of the page, so the whole of it is always laid out and the
+       transform is the only thing that changes. MobileSheet writes the offset
+       inline; this is only how it settles once the finger is off. */
+    /* How it settles once the finger is off. MobileSheet turns this off for
+       the duration of a drag and writes the transform itself, so this curve
+       only ever describes the release. */
+    transition: transform .34s cubic-bezier(.32, .72, 0, 1);
+    will-change: transform;
+    /* A scroll that reaches the end of the panel stops there instead of
+       handing the rest of itself to the page behind. */
+    overscroll-behavior: contain;
+  }
+
+  /* Handle 11px below the top edge, per node 2113:532. This 30px strip is the
+     whole of the closed sheet, and its lower half is the only gap between the
+     handle and the heading once it is open. */
+  .sheet-grab {
+    display: grid; width: 100%;
+    padding: 11px 16px 13px;
+    background: none; border: 0;
+    font-family: inherit; text-align: left;
+    cursor: grab;
+    /* The browser must not claim the vertical drag for a page scroll, and a
+       held handle must not start selecting the text under it. */
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+  }
+  .sheet-grab:active { cursor: grabbing; }
+  /* Node 2113:532: 122x6 at the card radius, centred. */
+  .sheet-handle { justify-self: center; width: 122px; height: 6px; border-radius: var(--radius); background: var(--ink-30); }
+
+  /* The heading sits just under the handle here. The desktop panel's 19px of
+     top padding is for a card floating in a column; this one is already
+     separated from the page by the sheet's own edge. */
+  .sheet .sidebar {
+    display: block;
+    background: none; box-shadow: none; border-radius: 0;
+    min-height: 0; padding: 6px 16px 18px;
+  }
+  .sheet .sidebar h3 { margin-bottom: 15px; }
+  /* The design drops the desktop panel's boxed input group for two bare rows
+     with one rule between them, running to the sheet's own gutter. */
+  .sheet .inputs { border: 0; border-radius: 0; }
+  .sheet .input-row { padding: 10px 0; gap: 8px; }
+  .sheet .input-row img { width: 22px; height: 22px; }
+  .sheet .input-row input {
+    /* The design sets 15px. Safari on iOS zooms the page in on focus for
+       anything under 16, and a layout that jumps the moment you tap the
+       address field is worse than the pixel of type it buys. */
+    font-size: 16px;
+  }
+  .sheet .note { margin: 16px 0 12px; }
+  /* Free to hang out of the sheet now, over the page behind it. Capped so it
+     stays a list rather than a screen. */
+  .sheet .ac-list { max-height: 40vh; }
+
+  /* ---- modals: "before you start" (node 2135:6277), log in (2120:4169) ----
+   * The 466px square is a desktop composition, and on a phone it spends its
+   * room in the wrong places: 36px of gutter either side of the body squeezed
+   * the three priority buttons until "Commute" would not fit one, and 63px of
+   * air above the mark plus 55px between the two questions pushed Continue
+   * under the fold. So the square gives up its minimum height and the padding
+   * comes in; the type, the fields and the buttons are untouched. */
+  .scrim { padding: 16px; }
+  .modal {
+    /* Tall as its content. The 466 was the drawn square, not a requirement. */
+    min-height: 0;
+    padding: 34px 0 28px;
+    /* dvh, not vh: with the keyboard up, iOS keeps vh at the full-screen
+       height, which puts Continue below the modal's own scroll with no way to
+       reach it. dvh shrinks with the visible viewport, so it stays reachable. */
+    max-height: 92dvh;
+  }
+  /* This is what was actually running the modal off the right edge.
+   *
+   * .modal-body is a fixed 387px wide, with a percentage max-width meant to
+   * reel it back in. But the percentage cannot resolve while the modal's own
+   * width is still being decided, so during sizing only the 387 counts -- and
+   * a grid item's automatic minimum size is its min-content, so the modal
+   * could not shrink below 387 plus its gutters however small the screen got.
+   * Under about 420px it overflowed to the right, which is what read as "not
+   * centred": it was centred on a box wider than the screen.
+   *
+   * So the body stops declaring a width at all here and its gutters become
+   * margins, and the modal is told its minimum is zero -- with nothing left
+   * flooring the track, max-width: 100% resolves against a real number and
+   * the modal fits and centres. */
+  .modal {
+    min-width: 0;
+    /* Stated against the viewport, which is definite whatever the grid does.
+       The rule above is the actual fix; this is the one that cannot fail. */
+    width: min(466px, calc(100vw - 32px));
+  }
+  .modal-body { width: auto; max-width: none; margin: 0 20px; }
+  .modal .mark { margin-bottom: 18px; }
+  /* Centred here, where the heading wraps to two or three lines in a 330px
+     body and a ragged left column of them sits oddly over a centred mark.
+     Only the heading: the two questions under it are form labels, and a label
+     reads from the same left edge as the field it belongs to.
+     The log in modal's headings already ask for this themselves, so in
+     practice this is the onboarding one catching up with them. */
+  .modal h3 { margin-bottom: 22px; text-align: center; }
+  .modal .gap { height: 28px; }
+  .modal .action { margin-top: 24px; }
+
+  /* Three in a row still, as drawn -- but every part of the button gives up a
+     little so the widest case fits the narrowest phone: "Commute" at 15px,
+     with its rank badge showing, needs about 91px, and three of those plus
+     the gaps fit any screen from 360px up.
+     Below that they wrap rather than squeeze, which costs a row of height on
+     a phone nobody sells any more and never clips a label. */
+  .choices { gap: 6px; flex-wrap: wrap; }
+  .choice { flex: 1 1 90px; min-width: 0; padding: 0 4px; font-size: 15px; gap: .25rem; }
+  .choice b { width: 15px; height: 15px; }
+
+  /* ---- tab pill: node 2113:8, 135x60 at (16, 788) ---- */
+  .tabbar {
+    position: fixed; left: 16px; z-index: 7;
+    bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+    display: grid; grid-template-columns: 1fr 1fr;
+    width: 135px; height: 60px;
+    background: var(--card); border-radius: 60px;
+    box-shadow: var(--panel-shadow);
+  }
+  /* Above the sheet's closed lip. MobileSheet measures that and publishes it
+     on the root, so the two cannot drift apart when the panel changes height;
+     the fallback is what it comes to with the form as it stands. */
+  .tabbar.raised { bottom: calc(var(--sheet-lip, 30px) + 12px + env(safe-area-inset-bottom, 0px)); }
+  .tabbar .tab {
+    display: grid; justify-items: center; align-content: center; gap: 2px;
+    padding: 0; background: none; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 10px; font-weight: 500; color: var(--ink-50);
+  }
+  .tabbar .tab.on { color: var(--ink); }
+  /* The 30px circle the design draws around each icon. Filled with the accent
+     on the tab you are on, which is what the desktop bar's underline says. */
+  .tab-mark {
+    position: relative;
+    display: grid; place-items: center;
+    width: 30px; height: 30px; border-radius: 50%;
+  }
+  .tab.on .tab-mark { background: var(--accent); }
+  .tab-mark img { width: 17px; height: 17px; }
+  .tab-count {
+    position: absolute; top: -2px; right: -4px;
+    display: grid; place-items: center;
+    min-width: 16px; height: 16px; padding: 0 3px;
+    background: var(--accent); border: 1.5px solid var(--card); border-radius: 999px;
+    font-size: 9px; font-style: normal; font-weight: 700; color: var(--ink);
+  }
+  .tab.on .tab-count { background: var(--card); border-color: var(--accent); }
+}

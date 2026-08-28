@@ -159,7 +159,13 @@ export async function scoreCommute(at: LatLng, destination: string): Promise<Pil
     route: drive.route,
     minutes: drive.minutes,
     headline: `${drive.minutes} min drive`,
-    detail:
-      `${drive.miles.toFixed(1)} mi to ${destination} in typical 8am traffic.` + transitNote,
+    /*
+     * The destination used to be spelled out here, and Google returns it fully
+     * qualified -- "San Jose State University, Washington Square, San Jose, CA
+     * 95112, USA" -- which was most of the line, the same on every listing,
+     * and already named at the top of the board. The miles and the hour are
+     * what this card knows that nothing else says.
+     */
+    detail: `${drive.miles.toFixed(1)} mi in typical 8am traffic.` + transitNote,
   };
 }

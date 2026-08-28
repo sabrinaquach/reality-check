@@ -3,6 +3,7 @@ import { icons } from "./icons.ts";
 import { withoutState } from "./address.ts";
 import { ScoreRing } from "./ScoreRing.tsx";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
+import { useMobile } from "./useMobile.ts";
 import type { RealityCheck } from "./types.ts";
 
 /**
@@ -69,6 +70,14 @@ export function SavedPage({
    */
   const ranked = [...saved].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
+  /**
+   * On the desktop what a selection does is visible while you do it: the
+   * column beside the list fills in, and a second selection turns it into the
+   * breakdown. On a phone there is no column -- a selection leaves this screen
+   * for the page it opens -- so the screen has to say so beforehand.
+   */
+  const mobile = useMobile();
+
   return (
     <div className="saved">
       <div className="saved-list">
@@ -79,6 +88,11 @@ export function SavedPage({
           <p className="saved-sub">
             {saved.length ? "Ranked by commute, safety, and cost." : "Nothing saved yet."}
           </p>
+          {mobile && saved.length > 0 && (
+            <p className="saved-how">
+              Tap one for its reality check, or two to compare them side by side.
+            </p>
+          )}
         </div>
 
         {ranked.length === 0 ? (

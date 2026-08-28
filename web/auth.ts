@@ -164,7 +164,33 @@ async function sendLink(email: string, url: string) {
 const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "";
 
-export const googleConfigured = () => !!CLIENT_ID && !!CLIENT_SECRET;
+/**
+ * Whether "Continue with Google" can actually complete, which is not the same
+ * as having credentials.
+ *
+ * Google validates the redirect URI it is handed against the ones registered
+ * on the client, and it will not accept an IP address at all -- only localhost
+ * is exempt from its HTTPS rule. So pointing APP_ORIGIN at a LAN address to
+ * reach the app from a phone leaves the button configured, live, and certain
+ * to end on Google's own "Access blocked" page.
+ *
+ * Better to report it as unavailable: the sign-in modal already draws a
+ * disabled Google button with a note saying why, and the emailed link works
+ * from anywhere APP_ORIGIN can be reached.
+ */
+export const googleConfigured = () =>
+  !!CLIENT_ID && !!CLIENT_SECRET && googleAcceptsRedirect();
+
+/** Google's own rules: https, or http on localhost. Never a bare IP. */
+function googleAcceptsRedirect(): boolean {
+  try {
+    const { protocol, hostname } = new URL(ORIGIN);
+    if (protocol === "https:") return true;
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The authorization-code flow, not the one-tap script: the sign-in button is

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddListing } from "./AddListing.tsx";
+import { MobileSheet } from "./MobileSheet.tsx";
 import { Onboarding } from "./Onboarding.tsx";
 import { PlacesNearWork } from "./PlacesNearWork.tsx";
 import { QuietNearby, type QuietSpot } from "./QuietNearby.tsx";
@@ -10,10 +11,13 @@ import { SavedPage } from "./SavedPage.tsx";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { AccountMenu } from "./AccountMenu.tsx";
-import { isSaved, persistSaved, removeSaved, toggleSaved } from "./saved.ts";
+import { TabBar } from "./TabBar.tsx";
+import { isSaved, loadPreviewSaved, persistSaved, removeSaved, SKIP_SIGNIN, toggleSaved } from "./saved.ts";
 import { fetchSavedFromServer, fetchSession, signOut, type Account } from "./auth.ts";
 import { addressIntent, forgetIntent, rememberIntent, takeIntent, type Intent } from "./pending.ts";
 import { Slot } from "./Slot.tsx";
+import { DragTip } from "./DragTip.tsx";
+import { useMobile } from "./useMobile.ts";
 import { icons } from "./icons.ts";
 import type { Priority, RealityCheck } from "./types.ts";
 
@@ -69,8 +73,33 @@ export function App() {
    * Empty until an account says otherwise. Saving needs one, so signed out
    * there is genuinely nothing here rather than a list waiting to be claimed.
    */
-  const [saved, setSaved] = useState<RealityCheck[]>([]);
+  const [saved, setSaved] = useState<RealityCheck[]>(loadPreviewSaved);
   const [tab, setTab] = useState<"check" | "saved">("check");
+  /**
+   * The phone layout, and whether its Add-a-listing sheet is open.
+   *
+   * The sheet starts closed. The design's frame draws it open, but that frame
+   * is the moment after tapping it -- landing on the board with the bottom
+   * third of the screen already spent would bury the comparison box this
+   * screen is mostly about.
+   */
+  const mobile = useMobile();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /**
+   * Which slot the sheet was opened to fill, or null when it was swiped up
+   * from its handle and is not about either of them.
+   *
+   * This is the point of opening it from a slot: "Add to comparison" used to
+   * append, filling whichever slot happened to be free, so pressing it under
+   * the second box could quietly fill the first. Coming in from a slot says
+   * which one, and the button says it back.
+   */
+  const [sheetFor, setSheetFor] = useState<0 | 1 | null>(null);
+
+  function openSheetFor(target: 0 | 1) {
+    setSheetFor(target);
+    setSheetOpen(true);
+  }
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +239,8 @@ export function App() {
    * so there is one answer to "what happens if nobody is signed in".
    */
   function withAccount(intent: Intent) {
-    if (account) {
+    // The preview hatch: no account, so nothing to ask for. See saved.ts.
+    if (account || SKIP_SIGNIN) {
       runIntent(intent);
       return;
     }
@@ -443,9 +473,38 @@ export function App() {
     return out;
   }, [slots, saved]);
 
+  /**
+   * Whether the board itself is on screen. The phone's Add-a-listing sheet
+   * belongs to the board and to nothing else -- the reality check, the
+   * breakdown and Saved all have their own actions -- and the tab pill sits
+   * higher when the sheet's collapsed lip is below it.
+   */
+  const onBoard =
+    tab !== "saved" && !(comparing && slots[0] && slots[1]) && detail === null;
+
+  /**
+   * The phone's reality check is a screen of its own: the map runs to the top
+   * edge and the back arrow floats on it, so the bar that would otherwise sit
+   * above the map stands down. Nothing is lost with it -- the account is one
+   * tap back, and the tab pill is still there.
+   */
+  /**
+   * Saved's selection opens a page of its own on the phone rather than filling
+   * a column that is not there. One selected is that listing's reality check,
+   * two is the breakdown -- the same two things the desktop column shows,
+   * given the whole screen because there is nothing to share it with.
+   */
+  const savedOnPhone = mobile && tab === "saved" && (lone !== null || pairFull);
+
+  const phoneDetail =
+    mobile &&
+    ((tab !== "saved" &&
+      (detail !== null || (comparing && slots[0] !== null && slots[1] !== null))) ||
+      savedOnPhone);
+
   return (
     <>
-      <nav className="nav">
+      <nav className={phoneDetail ? "nav nav-off" : "nav"}>
         <img className="logo" src={icons.logo} alt="Reality Check" />
         <button
           className={tab === "check" ? "navlink on" : "navlink"}
@@ -489,7 +548,31 @@ export function App() {
       </nav>
 
       <div className="page">
-        {tab === "saved" ? (
+        {savedOnPhone && pairFull && pair[0] && pair[1] ? (
+          <ComparePage
+            a={pair[0]}
+            b={pair[1]}
+            /* Back to the ranked list, with nothing selected -- the selection
+               and the page it opened are the same thing here. */
+            onBack={() => setPair([null, null])}
+            onOpen={(c) => setPair([c, null])}
+            onRent={applyRent}
+            listings={mapListings}
+            onCheck={(addr) => score(addr, "", "detail")}
+            onAdd={openListing}
+          />
+        ) : savedOnPhone && lone ? (
+          <RealityCheckPage
+            check={lone}
+            onBack={() => setPair([null, null])}
+            saved={isSaved(saved, lone)}
+            onToggleSave={() => withAccount({ kind: "save", check: lone })}
+            onRent={(rent) => applyRent(lone, rent)}
+            listings={mapListings}
+            onCheck={(addr) => score(addr, "", "detail")}
+            onAdd={openListing}
+          />
+        ) : tab === "saved" ? (
           <SavedPage
             saved={saved}
             pairFull={pairFull}
@@ -534,7 +617,7 @@ export function App() {
              * the board's own slots: this pair lives and dies on Saved.
              */
             detail={
-              pair[0] && pair[1] ? (
+              mobile ? undefined : pair[0] && pair[1] ? (
                 <ComparePage
                   inline
                   a={pair[0]}
@@ -600,6 +683,13 @@ export function App() {
             listings={mapListings}
             onCheck={(addr) => score(addr, "", "detail")}
             onAdd={openListing}
+            /* The phone's footer bar. Straight back to the board afterwards,
+               so the slot it just filled is the next thing on screen. */
+            onAddListing={() => {
+              fillSlot(detail, "append");
+              setDetail(null);
+              window.scrollTo(0, 0);
+            }}
             slotsFull={slotsFull}
           />
         ) : (
@@ -607,13 +697,18 @@ export function App() {
             <h1>Let's check a listing</h1>
         <p className="commuting">
           {work ? `Commuting to ${work}` : "No workplace set"}
+          {/* Beside the sentence rather than inside it, so it keeps its own
+              size instead of one the line dictates -- which is what makes it
+              big enough to hit on a phone. */}
           <button onClick={() => setOnboarding(true)} aria-label="Change your workplace and priorities">
             <img src={icons.edit} alt="" />
           </button>
         </p>
 
         {/* Watched, not drawn: the moment this scrolls out of view is the
-            moment the box below it parks at the top. */}
+            moment the box below it parks at the top. On the phone that matters
+            more than here -- it is the only way a card dragged up from a rail
+            has something to be dropped on. */}
         <div ref={sentinelRef} className="stick-sentinel" aria-hidden="true" />
 
         <div className="layout">
@@ -623,6 +718,7 @@ export function App() {
                 check={slots[0]}
                 onClear={() => clearSlot(0)}
                 onDropAddress={(a, rent) => score(a, rent ?? "", 0)}
+                onAdd={mobile ? () => openSheetFor(0) : undefined}
               />
               <span className="vs">vs</span>
               <Slot
@@ -630,6 +726,7 @@ export function App() {
                 check={slots[1]}
                 onClear={() => clearSlot(1)}
                 onDropAddress={(a, rent) => score(a, rent ?? "", 1)}
+                onAdd={mobile ? () => openSheetFor(1) : undefined}
               />
 
               {/* Figma node 2114:851 makes this a fixed part of the compare
@@ -655,16 +752,24 @@ export function App() {
               </button>
           </div>
 
-          <AddListing
-            busy={busy}
-            error={error}
-            slotsFull={slotsFull}
-            address={address}
-            onAddressChange={setAddress}
-            onSubmit={(a, r, mode) => score(a, r, mode === "replace" ? "detail" : "append")}
-          />
+          {/* On the phone this same form is the bottom sheet instead, so it
+              is rendered once, below, rather than twice and hidden by CSS. */}
+          {!mobile && (
+            <AddListing
+              busy={busy}
+              error={error}
+              slotsFull={slotsFull}
+              address={address}
+              onAddressChange={setAddress}
+              onSubmit={(a, r, mode) => score(a, r, mode === "replace" ? "detail" : "append")}
+            />
+          )}
 
           <div className="col">
+            {/* Above the first rail and below the slots, so "below" and
+                "above" in it both point at something on screen. */}
+            <DragTip />
+
             <PlacesNearWork
               work={work}
               at={workAt}
@@ -711,6 +816,49 @@ export function App() {
           </>
         )}
       </div>
+
+      {mobile && onBoard && (
+        <MobileSheet
+          open={sheetOpen}
+          /* Swiped shut, it stops being about whichever slot opened it. */
+          onOpenChange={(next) => {
+            setSheetOpen(next);
+            if (!next) setSheetFor(null);
+          }}
+          title="Add a listing"
+        >
+          <AddListing
+            busy={busy}
+            error={error}
+            slotsFull={slotsFull}
+            address={address}
+            onAddressChange={setAddress}
+            suggestions="down"
+            addLabel={sheetFor === null ? undefined : `Add as ${sheetFor === 0 ? "1st" : "2nd"} listing`}
+            onSubmit={(a, r, mode) => {
+              // Whatever this produces -- a filled slot on the board behind,
+              // or the listing's own page -- is the thing they asked to see,
+              // and the open sheet is covering it.
+              setSheetOpen(false);
+              const target = mode === "replace" ? "detail" : (sheetFor ?? "append");
+              setSheetFor(null);
+              void score(a, r, target);
+            }}
+          />
+        </MobileSheet>
+      )}
+
+      {/* Figma node 2113:8. The open sheet covers the pill in the design, so
+          it stands down rather than being drawn underneath one. */}
+      {mobile && !(onBoard && sheetOpen) && (
+        <TabBar
+          tab={tab}
+          savedCount={saved.length}
+          raised={onBoard}
+          onCheck={() => { setTab("check"); setDetail(null); setComparing(false); }}
+          onSaved={() => withAccount({ kind: "open-saved" })}
+        />
+      )}
 
       {signIn && (
         <SignIn

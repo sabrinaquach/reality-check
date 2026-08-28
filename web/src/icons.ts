@@ -8,6 +8,14 @@ export const icons = {
   dollar: "/icons/dollar.svg",
   edit: "/icons/edit.svg",
   home: "/icons/home.svg",
+  /**
+   * The one icon here not exported from Figma -- the mobile frame's empty
+   * slots (nodes 2113:43-47) carry no icon at all, so there was nothing to
+   * export. Drawn to the same spec as the rest: a 46 viewBox, a 2px stroke
+   * with round caps at 50% black, so it renders at the weight the house it
+   * stands in for did.
+   */
+  plus: "/icons/plus.svg",
   arrowLeft: "/icons/arrow-left.svg",
   arrowRight: "/icons/arrow-right.svg",
   /* One ring for both carousel arrows. They were two files that differed only
@@ -22,6 +30,8 @@ export const icons = {
   heartOutline: "/icons/heart-outline.svg",
   circleBtn: "/icons/circle-btn.svg",
   chevron: "/icons/chevron.svg",
+  /** Node 2113:475, exported and committed -- the asset URLs expire in a week. */
+  info: "/icons/info.svg",
   iconCar: "/icons/icon-car.svg",
   iconWarn: "/icons/icon-warn.svg",
   iconMoney: "/icons/icon-money.svg",

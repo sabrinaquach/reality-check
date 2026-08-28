@@ -3,6 +3,8 @@ import { icons } from "./icons.ts";
 import { ZoneMap, type MapListing } from "./ZoneMap.tsx";
 import { CommuteModes, CostBasis, IncidentBreakdown } from "./PillarDetail.tsx";
 import { explainCheck } from "./explain.ts";
+import { withoutState } from "./address.ts";
+import { useMobile } from "./useMobile.ts";
 import type { Pillar, RealityCheck } from "./types.ts";
 
 /**
@@ -30,10 +32,12 @@ function RentPrompt({
   pillar,
   busy,
   onSubmit,
+  title,
 }: {
   pillar: Pillar;
   busy: boolean;
   onSubmit: (rent: number) => void;
+  title: string;
 }) {
   const [rent, setRent] = useState("");
   const value = Number(rent);
@@ -42,6 +46,7 @@ function RentPrompt({
   return (
     <div className="rc-card">
       <span className="rc-chip">Needs a rent</span>
+      <span className="rc-pillar-name">{title}</span>
       <p className="rc-headline">{pillar.headline}</p>
       <p className="rc-detail">{pillar.detail}</p>
       <form
@@ -79,12 +84,15 @@ function CommuteCard({
   to,
   icon,
   size,
+  title,
 }: {
   pillar: Pillar;
   at: { lat: number; lng: number };
   to: string;
   icon: string;
   size: number;
+  /** Shown beside the chip on the phone, where there is no heading above. */
+  title: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -92,6 +100,7 @@ function CommuteCard({
     <div className={open ? "rc-card open" : "rc-card"}>
       <div className="rc-head">
         <span className={`rc-chip ${pillar.band}`}>{BAND_LABEL[pillar.band]}</span>
+        <span className="rc-pillar-name">{title}</span>
         <p className="rc-headline">{pillar.headline}</p>
         <p className="rc-detail">{pillar.detail}</p>
         <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
@@ -121,7 +130,7 @@ function CommuteCard({
  * it is read out of the same block index the score comes from -- so opening
  * this costs no request.
  */
-function SafetyCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size: number }) {
+function SafetyCard({ pillar, icon, size, title }: { pillar: Pillar; icon: string; size: number; title: string }) {
   const [open, setOpen] = useState(false);
   const groups = pillar.incidents ?? [];
 
@@ -129,6 +138,7 @@ function SafetyCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size
     <div className={open ? "rc-card open" : "rc-card"}>
       <div className="rc-head">
         <span className={`rc-chip ${pillar.band}`}>{BAND_LABEL[pillar.band]}</span>
+        <span className="rc-pillar-name">{title}</span>
         <p className="rc-headline">{pillar.headline}</p>
         <p className="rc-detail">{pillar.detail}</p>
         <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
@@ -156,13 +166,14 @@ function SafetyCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size
  * leases signed years ago. The panel says so, and it is the same one the
  * comparison page opens.
  */
-function CostCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size: number }) {
+function CostCard({ pillar, icon, size, title }: { pillar: Pillar; icon: string; size: number; title: string }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className={open ? "rc-card open" : "rc-card"}>
       <div className="rc-head">
         <span className={`rc-chip ${pillar.band}`}>{BAND_LABEL[pillar.band]}</span>
+        <span className="rc-pillar-name">{title}</span>
         <p className="rc-headline">{pillar.headline}</p>
         <p className="rc-detail">{pillar.detail}</p>
         <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
@@ -182,12 +193,13 @@ function CostCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size: 
   );
 }
 
-function PillarCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size: number }) {
+function PillarCard({ pillar, icon, size, title }: { pillar: Pillar; icon: string; size: number; title: string }) {
   if (pillar.unavailable) {
     return (
       <div className="rc-card out">
         <div className="rc-head">
           <span className="rc-chip">Not available</span>
+          <span className="rc-pillar-name">{title}</span>
           <p className="rc-headline">No data</p>
           <p className="rc-detail">{pillar.unavailable}</p>
           <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
@@ -199,6 +211,7 @@ function PillarCard({ pillar, icon, size }: { pillar: Pillar; icon: string; size
     <div className="rc-card">
       <div className="rc-head">
         <span className={`rc-chip ${pillar.band}`}>{BAND_LABEL[pillar.band]}</span>
+        <span className="rc-pillar-name">{title}</span>
         <p className="rc-headline">{pillar.headline}</p>
         <p className="rc-detail">{pillar.detail}</p>
         <img className="rc-icon" src={icon} alt="" style={{ width: size, height: size, right: 65 - size }} />
@@ -217,6 +230,7 @@ export function RealityCheckPage({
   listings = [],
   onCheck,
   onAdd,
+  onAddListing,
   slotsFull,
 }: {
   check: RealityCheck;
@@ -237,9 +251,25 @@ export function RealityCheckPage({
   listings?: MapListing[];
   onCheck?: (address: string) => void;
   onAdd?: (address: string) => void;
+  /**
+   * Put this listing into the comparison. The phone's footer bar (node
+   * 2113:469) is the only place this is offered: on the desktop the board's
+   * own form and its rails are a scroll away, and on this page they are a
+   * screen away.
+   */
+  onAddListing?: () => void;
   slotsFull?: boolean;
 }) {
   const [pricing, setPricing] = useState(false);
+  /**
+   * The phone's version of this page, which the design rebuilds rather than
+   * reflows: the map becomes the thing you land on, the rest rides up over it
+   * on a panel, and the listing itself moves to a bar at the foot of the
+   * screen. Embedded in the Saved column it stays the column it already was --
+   * there is no screen there to take over.
+   */
+  const phone = useMobile() && !inline;
+  const [why, setWhy] = useState(false);
   const amenities = check.pillars.find((p) => p.key === "amenities");
   const items = amenities?.items ?? [];
   const half = Math.ceil(items.length / 2);
@@ -269,8 +299,28 @@ export function RealityCheckPage({
       <span className={`rc-score ${check.band ?? ""}`}>{check.score}% score</span>
     ) : null;
 
+  /*
+   * Last on the desktop, where it is the closing section of a document; first
+   * on the phone, where node 2113:377 makes it the top 369px of the screen and
+   * everything else a panel drawn over its lower edge.
+   */
+  const mapSection = (
+    <section className="rc-section rc-map">
+      <h2>Commute &amp; safety zone</h2>
+      <ZoneMap
+        center={{ lat: check.listing.lat, lng: check.listing.lng }}
+        route={check.pillars.find((p) => p.key === "commute")?.route}
+        height={phone ? 369 : 404}
+        listings={listings}
+        onCheck={onCheck}
+        onAdd={onAdd}
+        slotsFull={slotsFull}
+      />
+    </section>
+  );
+
   return (
-    <div className={inline ? "rc rc-inline" : "rc"}>
+    <div className={`rc${inline ? " rc-inline" : ""}${phone ? " rc-phone" : ""}`}>
       {/*
        * Embedded, the heading row carries the heart and the score with it
        * (Figma node 2135:5355): there is no back button to anchor a row of its
@@ -302,10 +352,28 @@ export function RealityCheckPage({
        * line, and the two round 39px controls belong together at that end
        * instead of one by the title and one across the row from it.
        */}
+      {phone && mapSection}
+
+      {/* A plain wrapper on the desktop (display: contents), and the panel the
+          phone lifts over the map's lower edge. */}
+      <div className="rc-body">
       <div className="rc-head-row">
         <h1>Reality check</h1>
         <span className="spacer" />
         {scoreChip}
+        {/* Node 2113:475. What the number is made of, which a percentage on
+            its own cannot say -- and which changes with the priorities set
+            during onboarding, so it is not the same answer for everyone. */}
+        {phone && scoreChip && (
+          <button
+            className="rc-why"
+            onClick={() => setWhy((v) => !v)}
+            aria-expanded={why}
+            aria-label="How this score is worked out"
+          >
+            <img src={icons.info} alt="" />
+          </button>
+        )}
         {inline && heart}
       </div>
 
@@ -319,6 +387,14 @@ export function RealityCheckPage({
           rather than in the words the scoring uses to itself. */}
       <p className="rc-summary">{explainCheck(check)}</p>
 
+      {why && (
+        <p className="rc-weighting">
+          <img src={icons.info} alt="" />
+          Your score is based on commute, safety, and cost — weighted toward what matters most
+          to you.
+        </p>
+      )}
+
       {SECTIONS.map(({ key, title, icon, size }) => {
         const pillar = check.pillars.find((p) => p.key === key);
         if (!pillar) return null;
@@ -326,7 +402,7 @@ export function RealityCheckPage({
         const needsRent =
           key === "cost" && onRent && pillar.unavailable?.includes("No listed rent");
         return (
-          <section className="rc-section" key={key}>
+          <section className="rc-section rc-pillar" key={key}>
             <h3>{title}</h3>
             <p className="rc-sub">{pillar.basis}</p>
             {key === "commute" && !pillar.unavailable ? (
@@ -336,14 +412,16 @@ export function RealityCheckPage({
                 to={check.commuteTo}
                 icon={icon}
                 size={size}
+                title={title}
               />
             ) : key === "safety" && !pillar.unavailable ? (
-              <SafetyCard pillar={pillar} icon={icon} size={size} />
+              <SafetyCard pillar={pillar} icon={icon} size={size} title={title} />
             ) : key === "cost" && !pillar.unavailable ? (
-              <CostCard pillar={pillar} icon={icon} size={size} />
+              <CostCard pillar={pillar} icon={icon} size={size} title={title} />
             ) : needsRent ? (
               <RentPrompt
                 pillar={pillar}
+                title={title}
                 busy={pricing}
                 onSubmit={async (rent) => {
                   setPricing(true);
@@ -355,7 +433,7 @@ export function RealityCheckPage({
                 }}
               />
             ) : (
-              <PillarCard pillar={pillar} icon={icon} size={size} />
+              <PillarCard pillar={pillar} icon={icon} size={size} title={title} />
             )}
           </section>
         );
@@ -397,18 +475,34 @@ export function RealityCheckPage({
         </section>
       )}
 
-      <section className="rc-section">
-        <h2>Commute &amp; safety zone</h2>
-        <ZoneMap
-          center={{ lat: check.listing.lat, lng: check.listing.lng }}
-          route={check.pillars.find((p) => p.key === "commute")?.route}
-          height={404}
-          listings={listings}
-          onCheck={onCheck}
-          onAdd={onAdd}
-          slotsFull={slotsFull}
-        />
-      </section>
+      </div>
+
+      {!phone && mapSection}
+
+      {/* Node 2113:469: the listing itself, parked at the foot of the screen.
+          Everything above is about it, and by the third card its address has
+          long since scrolled away. */}
+      {phone && (
+        <div className="rc-bar">
+          <div className="rc-bar-id">
+            <div className="rc-bar-addr">{withoutState(check.listing.address)}</div>
+            <p className="rc-bar-rent">
+              {check.listing.rent ? (
+                <>
+                  <b>${check.listing.rent.toLocaleString()}</b> / mo
+                </>
+              ) : (
+                "No rent given"
+              )}
+            </p>
+          </div>
+          {onAddListing && (
+            <button className="rc-bar-add" onClick={onAddListing} disabled={slotsFull}>
+              {slotsFull ? "Slots full" : "Add listing"}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

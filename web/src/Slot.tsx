@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { icons } from "./icons.ts";
 import { ScoreRing } from "./ScoreRing.tsx";
 import { withoutState } from "./address.ts";
+import { useMobile } from "./useMobile.ts";
+import { DROP_EVENT, type DragPayload } from "./touchDrag.ts";
 import type { Pillar, RealityCheck } from "./types.ts";
 
 /**
@@ -54,16 +56,55 @@ export function Slot({
   check,
   onClear,
   onDropAddress,
+  onAdd,
 }: {
   ordinal: string;
   check: RealityCheck | null;
   onClear: () => void;
   /** `rent` is present when the dragged card knew one, e.g. a rental listing. */
   onDropAddress: (address: string, rent?: string) => void;
+  /**
+   * Open the form to fill this slot. Passed only on the phone, where the form
+   * is a sheet that has to be summoned -- the desktop's is a panel already
+   * sitting beside these slots, so there is nothing there to open.
+   *
+   * Without it an empty slot is only a drop target, which is to say it does
+   * nothing at all until a card exists to drop, while reading as an
+   * instruction: "Add 1st listing". This makes the label true.
+   */
+  onAdd?: () => void;
 }) {
   const [over, setOver] = useState(false);
+  /**
+   * The phone's empty slot is a button that opens the form, so its mark says
+   * the action -- a plus. The desktop's is not pressable at all; it is a place
+   * a card is dropped, and a house is what it is a place for.
+   */
+  const mobile = useMobile();
+
+  /**
+   * The same drop, arriving the other way.
+   *
+   * HTML5 drag and drop hands the payload to `onDrop` below; a finger cannot
+   * use that API at all, so touchDrag.ts dispatches this instead on whatever
+   * slot it was let go over. Both roads end at the same `onDropAddress`.
+   */
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    const dropped = (e: Event) => {
+      const { address, rent } = (e as CustomEvent<DragPayload>).detail;
+      onDropAddress(address, rent);
+    };
+    node.addEventListener(DROP_EVENT, dropped);
+    return () => node.removeEventListener(DROP_EVENT, dropped);
+  }, [onDropAddress]);
 
   const dropProps = {
+    ref: box,
+    /* What touchDrag.ts hit-tests for. */
+    "data-drop-slot": "",
     onDragOver: (e: React.DragEvent) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
@@ -82,9 +123,22 @@ export function Slot({
   };
 
   if (!check) {
+    const tappable = onAdd
+      ? {
+          role: "button" as const,
+          tabIndex: 0,
+          onClick: onAdd,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onAdd();
+            }
+          },
+        }
+      : null;
     return (
-      <div className={over ? "slot over" : "slot"} {...dropProps}>
-        <img src={icons.home} alt="" />
+      <div className={over ? "slot over" : "slot"} {...dropProps} {...tappable}>
+        <img src={mobile ? icons.plus : icons.home} alt="" />
         <span>Add {ordinal} listing</span>
       </div>
     );
@@ -98,7 +152,10 @@ export function Slot({
               for every listing here, and the full string wrapped to two lines
               once the clear control took its corner. */}
           <div className="slot-addr">{withoutState(check.listing.address)}</div>
-          <p className="slot-summary">{check.summary}</p>
+          {/* At 137px wide the verdict ran to four lines and pushed the score
+              off the card. It is the first thing on the listing's own page,
+              which this card is a tap away from. */}
+          {!mobile && <p className="slot-summary">{check.summary}</p>}
           <p className="slot-rent">
             {check.listing.rent ? (
               <>
@@ -109,7 +166,17 @@ export function Slot({
             )}
           </p>
         </div>
-        <ScoreRing score={check.score} band={check.band} />
+        {/* The phone wears the same pill the reality check does (node
+            2136:6532) rather than the ring: it carries the band colour across
+            the full width of a narrow card, where a 44px ring was a small
+            thing in a lot of empty space. */}
+        {mobile ? (
+          check.score !== null && (
+            <span className={`rc-score ${check.band ?? ""}`}>{check.score}% score</span>
+          )
+        ) : (
+          <ScoreRing score={check.score} band={check.band} />
+        )}
       </div>
 
       <div className="pillars">
